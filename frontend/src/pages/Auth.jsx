@@ -36,10 +36,15 @@ export default function AuthPage() {
       }
     } catch (err) {
       const msg = err?.message || 'Falha na autenticação';
-      if (msg.toLowerCase().includes('email_not_confirmed') || msg.toLowerCase().includes('email not confirmed')) {
+      const status = err?.status;
+      if (status === 429 || /rate limit|over_email_send_rate/i.test(msg)) {
+        toast.error('Muitas tentativas. Aguarde alguns minutos e tente novamente.', { duration: 6000 });
+      } else if (msg.toLowerCase().includes('email_not_confirmed') || msg.toLowerCase().includes('email not confirmed')) {
         toast.error('Confirme seu email antes de entrar. Verifique sua caixa de entrada.', { duration: 6000 });
       } else if (msg.toLowerCase().includes('invalid login credentials')) {
         toast.error('Email ou senha incorretos');
+      } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+        toast.error('Este email já está cadastrado. Faça login.');
       } else {
         toast.error(msg);
       }
