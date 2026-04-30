@@ -1,0 +1,158 @@
+{
+  "project_name": "Teologia Viva",
+  "app_type": "PWA Mobile-First",
+  "domain": "Christian Theology Study and Devotional Platform",
+  "theme_and_archetype": {
+    "theme": "Dark Base with Contemplative Light Surfaces",
+    "archetype": "Archetype 5 (Jewel & Luxury) + Archetype 1 (Organic & Earthy)",
+    "description": "Minimalist, sober, and contemplative. Using Navy Blue (#001F3F) as the foundational brand and structural color, highlighted with Gold/Sepia (#D4AF37, #C5A059) for premium biblical aesthetics. The UI should evoke reverence, focus, and spiritual depth, avoiding generic corporate looks."
+  },
+  "typography": {
+    "fonts": [
+      {
+        "family": "Cormorant Garamond",
+        "google_font_url": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap",
+        "usage": "Headings (H1, H2, H3), Devotional Titles, Bible Verses, Stylized Quotes. It gives a literary and scriptural feel.",
+        "tailwind_class": "font-serif"
+      },
+      {
+        "family": "Karla",
+        "google_font_url": "https://fonts.googleapis.com/css2?family=Karla:wght@300;400;500;600;700&display=swap",
+        "usage": "UI text, Body copy, Labels, Navigation, Buttons, Notes. It provides clean, unpretentious readability.",
+        "tailwind_class": "font-sans"
+      }
+    ],
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl tracking-tight leading-none font-serif font-medium",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-serif font-medium",
+      "h3": "text-xl font-serif font-medium text-gold",
+      "body": "text-base leading-relaxed font-sans text-neutral-300",
+      "verse": "text-2xl leading-relaxed font-serif italic text-gold/90 text-center",
+      "small_label": "text-xs tracking-[0.15em] uppercase font-sans font-semibold text-gold/70"
+    }
+  },
+  "colors": {
+    "description": "Navy Blue canvas with Sepia/Gold glowing accents. Forms a premium, religious reading environment.",
+    "css_variables": {
+      "--background": "210 100% 12%",
+      "--foreground": "45 20% 90%",
+      "--card": "212 80% 15%",
+      "--card-foreground": "45 20% 90%",
+      "--popover": "212 80% 15%",
+      "--popover-foreground": "45 20% 90%",
+      "--primary": "45 65% 53%",
+      "--primary-foreground": "210 100% 12%",
+      "--secondary": "213 60% 20%",
+      "--secondary-foreground": "45 20% 90%",
+      "--muted": "213 60% 20%",
+      "--muted-foreground": "45 15% 70%",
+      "--accent": "42 40% 60%",
+      "--accent-foreground": "210 100% 12%",
+      "--destructive": "0 60% 40%",
+      "--destructive-foreground": "45 20% 90%",
+      "--border": "45 65% 53%",
+      "--input": "213 60% 20%",
+      "--ring": "45 65% 53%",
+      "--radius": "0.5rem",
+      "--parchment-bg": "45 30% 95%",
+      "--parchment-text": "210 100% 12%"
+    },
+    "tailwind_extensions": {
+      "colors": {
+        "navy": {
+          "DEFAULT": "#001F3F",
+          "light": "#002B5E",
+          "dark": "#001224"
+        },
+        "gold": {
+          "DEFAULT": "#D4AF37",
+          "muted": "#AA8830",
+          "glow": "rgba(212, 175, 55, 0.5)"
+        },
+        "sepia": {
+          "DEFAULT": "#F9F6F0",
+          "dark": "#E6DFD1",
+          "text": "#4A3F35"
+        }
+      }
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Mobile-First App Layout",
+    "container": "max-w-md mx-auto min-h-screen bg-navy flex flex-col relative pb-20 (to account for bottom nav)",
+    "padding": "px-5 py-6",
+    "cards": "bg-navy-light/50 border border-gold/10 rounded-xl p-5 backdrop-blur-sm",
+    "bottom_nav": "fixed bottom-0 left-0 right-0 h-16 bg-navy/90 backdrop-blur-xl border-t border-gold/20 flex justify-around items-center max-w-md mx-auto z-50",
+    "reading_mode": "For Bible and Text content: bg-sepia text-navy rounded-t-3xl p-6 shadow-inner"
+  },
+  "components": {
+    "BottomNavigation": {
+      "style": "Glassmorphism navigation. Icons should be minimal (Lucide). Active state gets a gold tint and subtle glow. Inactive state is muted blue/grey.",
+      "tabs": ["Início", "Academia", "Bíblia", "Comunidade", "Eventos"]
+    },
+    "DevotionalCard": {
+      "style": "Hero element on 'Início'. Should use a dark overlay over a contemplative background image, with a glowing gold title, highly styled serif verse in the center, and a clean reading button.",
+      "padding": "p-8",
+      "radius": "rounded-2xl"
+    },
+    "AcademyCourseCard": {
+      "style": "Bento or vertical list style. Use a thumbnail, title, and a golden progress bar. Eixos (categories) can be horizontal scrolling pills.",
+      "border": "1px solid gold/20"
+    },
+    "BibleReader": {
+      "style": "Must toggle into a 'Parchment Mode' (Light background, deep navy text) for fluid reading. Serif font for verses. Selecting a verse should trigger a subtle slide-up modal (Drawer) for 'Explicar com IA'.",
+      "line_height": "leading-loose"
+    },
+    "PrayerWall": {
+      "style": "Feed style. Cards for prayer requests. 'Vou Orar' (I will pray) button is a subtle toggle (Ghost to Solid Gold) to avoid gamifying prayer but providing support."
+    },
+    "AITutorChat": {
+      "style": "Chat UI within Academy. The tutor message bubbles should be soft navy/gold border. User bubbles subtle sepia."
+    },
+    "AuthFlow": {
+      "style": "Full screen Navy background. Centered elegant logo. Input fields are transparent with gold bottom border or subtle solid dark blue with gold focus ring. 'Start 7-Day Trial' prominent CTA."
+    }
+  },
+  "motion_and_interactions": {
+    "transitions": "Slow, deliberate, graceful. duration-500 ease-out.",
+    "hover": "Not heavily used due to mobile-first nature, but buttons should scale down slightly on active (press) state: active:scale-95.",
+    "page_load": "Fade in with a slight upward translation (translate-y-4 to translate-y-0 opacity-0 to opacity-100).",
+    "modals": "Use Shadcn Drawer (bottom sheet) for mobile friendliness (e.g., IA Explanations, Event details)."
+  },
+  "media": {
+    "icons": {
+      "library": "lucide-react",
+      "stroke_width": "1.5",
+      "guidance": "Use thin, elegant strokes to match the serif font."
+    },
+    "image_urls": [
+      {
+        "category": "devotional_hero",
+        "url": "https://images.unsplash.com/photo-1564182910735-f4084c663978?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwyfHxvbGQlMjB0aGVvbG9neSUyMGJvb2slMjBzZXBpYXxlbnwwfHx8fDE3Nzc1ODQ3MTh8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Selective focus photography of Holy Bible. Warm sepia lighting. Perfect for Devotional Hero overlay (needs bg-navy/60 overlay)."
+      },
+      {
+        "category": "course_thumbnail_1",
+        "url": "https://images.unsplash.com/photo-1489421471208-251cc68284b8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwxfHxvbGQlMjB0aGVvbG9neSUyMGJvb2slMjBzZXBpYXxlbnwwfHx8fDE3Nzc1ODQ3MTh8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Opened vintage book. Good for theology course thumbnail."
+      },
+      {
+        "category": "reading_background_texture",
+        "url": "https://images.unsplash.com/photo-1560586738-6320184118ba?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHwyfHxiaWJsZSUyMHJlYWRpbmclMjB2aW50YWdlfGVufDB8fHx8MTc3NzU4NDcxOHww&ixlib=rb-4.1.0&q=85",
+        "description": "White and black book page. Good for subtle overlay or article header."
+      }
+    ]
+  },
+  "testing": {
+    "requirements": "All interactive elements MUST include `data-testid` attribute. E.g., `data-testid='tab-inicio'`, `data-testid='btn-vou-orar'`, `data-testid='course-card'`."
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Tailwind using the colors provided. Make sure to map the root variables properly to handle the deep navy theme.",
+    "2. Ensure the main layout acts as a Mobile PWA frame (max-w-md, mx-auto, hide scrollbars on main wrapper).",
+    "3. Implement the bottom navigation fixed to the bottom of the max-w-md wrapper.",
+    "4. Add Lucide icons to the tabs.",
+    "5. Use Cormorant Garamond for all biblical texts and main headers to ensure the requested reverent aesthetic.",
+    "6. Build the Bible tab with an inverted reading mode (parchment background) for better long-form reading comfort.",
+    "7. When creating the 'Explicar com IA' feature, use a mobile-friendly Drawer component from Shadcn."
+  ]
+}
