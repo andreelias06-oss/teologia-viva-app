@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only testing of Teologia Viva PWA. Auth page renders correctly. However signup creates account but returns NO session because the Supabase project has email confirmation ENABLED. Login fails with 'email_not_confirmed'. This blocks every authenticated feature (Inicio, Academia, Curso, Aula, Biblia, Comunidade, Eventos, Anotacoes, Perfil, AI tutor, AI rate limit, plan logic). Also found `profiles` table schema is missing the `plano` column and RLS denies SELECT for anon role; the app's synthetic-profile fallback would mask this if a session existed, but no session is ever created.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AuthPage / Supabase project", "issue": "Email confirmation is enabled in Supabase Auth settings. signUp returns user but session=null, so Protected routes immediately redirect back to /auth. Subsequent signIn returns 400 {code: 'email_not_confirmed'}. End-to-end testing of ALL authenticated features is blocked.", "selector": "[data-testid=\"auth-submit-btn\"]", "priority": "CRITICAL"},
+      {"component": "profiles table schema (Supabase)", "issue": "PGRST204 — Could not find the 'plano' column of 'profiles' in the schema cache. Upsert on signup fails with 400. App has synthetic-profile fallback so UI wouldn't crash once a session exists, but the schema must still match app expectations (plano, trial_inicio, nome, email).", "selector": "n/a (REST /rest/v1/profiles)", "priority": "HIGH"},
+      {"component": "profiles RLS policies", "issue": "SELECT on profiles returns 401 {code: '42501', 'permission denied for table profiles'}. Hint: GRANT SELECT ON public.profiles TO anon; (or authenticated). Fallback masks it but prevents real profile (plan, nome) from ever loading.", "selector": "n/a", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Signup → redirect to /", "issue": "After signUp, navigate('/') runs but Protected sees user=null (because Supabase returned session=null due to email confirmation requirement) and redirects back to /auth. A green success toast 'Conta criada — seu trial de 7 dias começou' appears but the user is stuck on /auth.", "affected_selectors": ["[data-testid=\"auth-submit-btn\"]", "[data-testid=\"plan-badge\"]"]},
+      {"flow": "Login after signup", "issue": "Fails 400 email_not_confirmed. UI shows a red toast but then stays on /auth with empty fields — no explicit guidance that email needs to be confirmed.", "affected_selectors": ["[data-testid=\"auth-submit-btn\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "CRITICAL: In Supabase Dashboard → Authentication → Providers → Email, DISABLE 'Confirm email' for this project (or enable auto-confirm), so signUp immediately returns a session. Without this, the whole product is unusable end-to-end and no testing agent can proceed.",
+    "Add the missing `plano` column (text, default 'trial') to public.profiles. Also ensure columns: id uuid PK, nome text, email text, trial_inicio timestamptz, trial_fim timestamptz (optional). Re-check the upsert payload in AuthContext.jsx against the real schema.",
+    "Add RLS policy: `GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;` and a policy like `CREATE POLICY \"users read own profile\" ON public.profiles FOR SELECT USING (auth.uid() = id);` plus a matching insert/update policy. Currently anon/authenticated are denied.",
+    "After fixing the three items above, re-run this iteration to validate signup → trial badge → devocional → Academia → Biblia → Comunidade → Eventos → Anotacoes → Perfil → Tutor IA → Free plan lock on lesson 2+ → 5 AI calls/day rate limit.",
+    "Nice-to-have: when signIn fails with 'email_not_confirmed', show a clearer PT-BR toast like 'Confirme seu email antes de entrar' and optionally a 'Reenviar email de confirmação' button."
+  ],
+  "critical_code_review_comments": [
+    "AuthContext.jsx: signUp's silent `try { upsert } catch {}` swallows errors but the upsert actually returns a 400 JSON (not a thrown exception) from supabase-js v2. The failed upsert is logged to the console as `Failed to load resource 400`. Consider awaiting and checking `error` property and logging a clearer warning.",
+    "AuthContext.jsx: when Supabase returns session=null (email-confirm flow), signUp resolves successfully and Auth.jsx calls navigate('/'), but Protected redirects back. UX bug — detect `!data.session` and show a message like 'Verifique seu email para concluir o cadastro' instead of navigating.",
+    "No guard against stale tokens or expired trial computation on the frontend — plan.js was not inspected end-to-end but should be reviewed once the auth blocker is unblocked.",
+    "Frontend `.env` holds the Supabase anon key in plaintext (expected for client), but do add `REACT_APP_` prefixing consistency check. All keys are present (REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_ANON_KEY)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (backend not tested per request)", "frontend": "0% of authenticated flows (blocked at auth). Auth page UI renders correctly."},
+  "test_credentials": "Attempted: test+1777585472@teologia.test / TestPass123 (signup 200 but no session). qatest1777585550@gmail.com / TestPass123 (signup 200, login 400 email_not_confirmed). No confirmed test account available.",
+  "seed_data_creation": "None created (blocked at auth).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "The three Supabase-side fixes MUST land before any feature test can run. Once they do, sign up a fresh email like qatest+<ts>@gmail.com and the app should navigate to '/', show [data-testid=plan-badge] containing 'Trial · 7d', render [data-testid=devocional-card] (or a fallback message if no devocional for CURRENT_DATE). Then walk the 5 bottom-nav tabs, then /anotacoes, /perfil, /curso/:id, /aula/:id. Use viewport 420x844. The edge function POST ${REACT_APP_SUPABASE_URL}/functions/v1/clever-task with {prompt} body was not reachable in this run because no session existed to authorize it.",
+  "rca of the issue": "1) `POST /auth/v1/signup` returns 200 with user object but **no session** (because Supabase project has 'Confirm email' enabled). AuthProvider.signUp therefore never populates `user`, so when Auth.jsx calls `navigate('/')`, Protected sees `user=null` and redirects straight back to /auth. 2) `POST /auth/v1/token?grant_type=password` returns 400 `{code:'email_not_confirmed'}` on subsequent login. 3) Independently, the `profiles` upsert returns 400 `PGRST204 Could not find the 'plano' column` and GET returns 401 `42501 permission denied for table profiles`. Reproduction: open /auth, tab 'Criar conta', enter a unique email + nome + senha >=6 chars, click 'Começar trial de 7 dias' → green success toast but URL stays /auth. Mitigation: (a) disable email confirmation in Supabase, (b) add `plano text default 'trial'` and sibling columns to public.profiles, (c) add RLS + GRANT for authenticated role."
+}

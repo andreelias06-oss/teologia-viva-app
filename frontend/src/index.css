@@ -4,72 +4,41 @@
 
 body {
     margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
+    font-family: 'Karla', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-}
-
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+    background-color: #001224;
+    color: #EDE7D8;
+    overscroll-behavior-y: none;
 }
 
 @layer base {
     :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        --background: 211 100% 7%;
+        --foreground: 45 35% 90%;
+        --card: 212 80% 12%;
+        --card-foreground: 45 30% 90%;
+        --popover: 212 80% 10%;
+        --popover-foreground: 45 30% 90%;
+        --primary: 45 65% 53%;
+        --primary-foreground: 211 100% 8%;
+        --secondary: 213 60% 18%;
+        --secondary-foreground: 45 25% 90%;
+        --muted: 213 50% 16%;
+        --muted-foreground: 45 15% 70%;
+        --accent: 42 50% 60%;
+        --accent-foreground: 211 100% 8%;
+        --destructive: 0 60% 45%;
+        --destructive-foreground: 45 25% 95%;
+        --border: 45 40% 35%;
+        --input: 213 40% 22%;
+        --ring: 45 65% 53%;
+        --chart-1: 45 65% 53%;
+        --chart-2: 213 60% 40%;
+        --chart-3: 30 50% 55%;
+        --chart-4: 200 40% 50%;
+        --chart-5: 15 60% 50%;
+        --radius: 0.75rem;
     }
 }
 
@@ -80,36 +49,61 @@ code {
     body {
         @apply bg-background text-foreground;
     }
+    h1, h2, h3, h4 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        letter-spacing: -0.01em;
+    }
 }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
+/* Hide scrollbars on horizontal scrollers */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
 
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+/* Parchment mode for Bible reading */
+.parchment {
+    background:
+        radial-gradient(circle at 20% 10%, rgba(212, 175, 55, 0.08), transparent 40%),
+        radial-gradient(circle at 80% 90%, rgba(74, 63, 53, 0.05), transparent 40%),
+        #F9F6F0;
+    color: #2A2018;
+}
+
+.verse-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    color: #AA8830;
+    font-size: 0.7em;
+    vertical-align: super;
+    margin-right: 0.25em;
+    margin-left: 0.15em;
+}
+
+.gold-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(212,175,55,0.5), transparent);
+}
+
+.glass-bottom {
+    background: rgba(0, 18, 36, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.drop-cap::first-letter {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 3.6em;
+    line-height: 0.85;
+    font-weight: 500;
+    float: left;
+    padding: 0.05em 0.12em 0 0;
+    color: #D4AF37;
+}
+
+[data-debug-wrapper="true"] {
+    display: contents !important;
 }

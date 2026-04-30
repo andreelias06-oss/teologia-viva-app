@@ -1,0 +1,9 @@
+{
+  "short_name": "Teologia Viva",
+  "name": "Teologia Viva",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#001F3F",
+  "background_color": "#001224"
+}
