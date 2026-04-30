@@ -79,12 +79,28 @@ export function AuthProvider({ children }) {
       } catch {
         /* ignore */
       }
-      if (data.session) {
-        await loadProfile(userId);
+    }
+
+    // Supabase may return user auto-confirmed but session=null depending on project settings.
+    // If user is confirmed (email_confirmed_at present) and we have their password, sign them in now.
+    if (!data.session && data.user?.email_confirmed_at) {
+      try {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (!signInError && signInData.session) {
+          await loadProfile(signInData.user.id);
+          return { ...data, session: signInData.session, user: signInData.user };
+        }
+      } catch {
+        /* fall through */
       }
     }
-    // If session is null, email confirmation is required by the Supabase project
-    return { ...data, needsEmailConfirmation: !data.session && !!data.user };
+
+    if (data.session && userId) {
+      await loadProfile(userId);
+    }
+
+    // If still no session AND user is not confirmed, email confirmation is actually required.
+    return { ...data, needsEmailConfirmation: !data.session && !data.user?.email_confirmed_at };
   };
 
   const signIn = async ({ email, password }) => {
