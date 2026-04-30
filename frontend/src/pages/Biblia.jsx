@@ -62,7 +62,7 @@ export default function Biblia() {
       incrementAICalls(user?.id);
       setExplanation(ans);
     } catch (e) {
-      toast.error('Falha ao consultar a IA');
+      toast.error('Falha ao consultar a IA. Verifique a Edge Function e tente novamente.');
     } finally {
       setExplaining(false);
     }

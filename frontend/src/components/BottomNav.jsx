@@ -13,7 +13,7 @@ export default function BottomNav() {
   return (
     <nav
       data-testid="bottom-nav"
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-[68px] glass-bottom border-t border-gold/20 z-50"
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-[68px] glass-bottom border-t border-gold/20 z-[60]"
     >
       <ul className="flex justify-around items-stretch h-full px-2">
         {TABS.map((t) => {

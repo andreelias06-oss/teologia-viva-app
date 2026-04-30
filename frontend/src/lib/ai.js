@@ -16,8 +16,12 @@ export async function callCleverTask(prompt) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Edge Function error: ${res.status} ${text}`);
+    let detail = '';
+    try { detail = await res.text(); } catch { /* ignore */ }
+    const msg = res.status === 0
+      ? 'A função de IA está inacessível (CORS). Verifique a configuração da Edge Function clever-task.'
+      : `Edge Function retornou ${res.status}. ${detail.slice(0, 200)}`;
+    throw new Error(msg);
   }
 
   const data = await res.json().catch(() => ({}));
