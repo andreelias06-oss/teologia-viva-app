@@ -79,9 +79,12 @@ export function AuthProvider({ children }) {
       } catch {
         /* ignore */
       }
-      await loadProfile(userId);
+      if (data.session) {
+        await loadProfile(userId);
+      }
     }
-    return data;
+    // If session is null, email confirmation is required by the Supabase project
+    return { ...data, needsEmailConfirmation: !data.session && !!data.user };
   };
 
   const signIn = async ({ email, password }) => {

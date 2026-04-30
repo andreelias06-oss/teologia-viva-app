@@ -23,13 +23,26 @@ export default function AuthPage() {
       if (mode === 'login') {
         await signIn({ email, password });
         toast.success('Bem-vindo de volta');
+        navigate('/', { replace: true });
       } else {
-        await signUp({ email, password, nome });
-        toast.success('Conta criada — seu trial de 7 dias começou');
+        const result = await signUp({ email, password, nome });
+        if (result?.needsEmailConfirmation) {
+          toast.success('Conta criada! Confirme seu email para entrar.', { duration: 6000 });
+          setMode('login');
+        } else {
+          toast.success('Conta criada — seu trial de 7 dias começou');
+          navigate('/', { replace: true });
+        }
       }
-      navigate('/', { replace: true });
     } catch (err) {
-      toast.error(err?.message || 'Falha na autenticação');
+      const msg = err?.message || 'Falha na autenticação';
+      if (msg.toLowerCase().includes('email_not_confirmed') || msg.toLowerCase().includes('email not confirmed')) {
+        toast.error('Confirme seu email antes de entrar. Verifique sua caixa de entrada.', { duration: 6000 });
+      } else if (msg.toLowerCase().includes('invalid login credentials')) {
+        toast.error('Email ou senha incorretos');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }
