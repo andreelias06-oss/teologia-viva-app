@@ -23,6 +23,7 @@ export default function Biblia() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
+  const [explanationKey, setExplanationKey] = useState(0);
   const [notes, setNotes] = useState({}); // verse → row
   const [draftObs, setDraftObs] = useState('');
   const [savingObs, setSavingObs] = useState(false);
@@ -113,11 +114,13 @@ export default function Biblia() {
     }
     setExplaining(true);
     setExplanation('');
+    setExplanationKey((k) => k + 1);
     try {
       const prompt = `Explique de forma clara, devocional e teologicamente fiel o seguinte versículo bíblico em português:\n\nReferência: ${book?.nome} ${chapter}:${selectedVerse.number}\nTexto: "${selectedVerse.text}"\n\nIncentive aplicação prática à vida cristã.`;
       const ans = await callCleverTask(prompt);
       incrementAICalls(user?.id);
       setExplanation(ans);
+      setExplanationKey((k) => k + 1);
     } catch (e) {
       toast.error('Falha ao consultar a IA');
     } finally {
@@ -338,7 +341,7 @@ export default function Biblia() {
             </section>
 
             {/* Section: Explicar com IA — INLINE, aparece logo abaixo do versículo (não depende de footer) */}
-            <section>
+            <section key={`explain-section-${selectedVerse?.number ?? 'none'}`}>
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
                 <Sparkles size={12} /> Tutor IA
               </p>
@@ -350,14 +353,23 @@ export default function Biblia() {
               >
                 {explaining ? <><Loader2 size={16} className="mr-2 animate-spin" /> Refletindo…</> : <><Sparkles size={16} className="mr-2" /> Explicar com IA</>}
               </Button>
-              {explanation && (
-                <div className="mt-3 rounded-xl border border-gold/15 bg-navy-light/40 p-4">
-                  <p
-                    className="text-foreground/90 font-sans whitespace-pre-wrap leading-relaxed text-sm"
-                    data-testid="verse-explanation"
-                  >{explanation}</p>
-                </div>
-              )}
+              <div key={`explanation-slot-${explanationKey}`} className="mt-3">
+                {explaining ? (
+                  <div className="rounded-xl border border-gold/15 bg-navy-light/40 p-4 space-y-2">
+                    <Skeleton className="h-3 w-3/4 bg-navy-dark/60" />
+                    <Skeleton className="h-3 w-full bg-navy-dark/60" />
+                    <Skeleton className="h-3 w-5/6 bg-navy-dark/60" />
+                    <Skeleton className="h-3 w-2/3 bg-navy-dark/60" />
+                  </div>
+                ) : explanation ? (
+                  <div className="rounded-xl border border-gold/15 bg-navy-light/40 p-4">
+                    <p
+                      className="text-foreground/90 font-sans whitespace-pre-wrap leading-relaxed text-sm"
+                      data-testid="verse-explanation"
+                    >{explanation}</p>
+                  </div>
+                ) : null}
+              </div>
             </section>
           </div>
         </DrawerContent>
