@@ -47,6 +47,10 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (01/mai/2026)
+- [x] **Bug fix (P0)**: Crash React `insertBefore` ao clicar "Explicar com IA" na Bíblia — isolado bloco de explicação em novo componente `VerseExplanation.jsx`, substituído `&&` por ternários `? : null`, `key` único no container do drawer vinculado a `selectedVerse.number`. Verificado pelo testing agent (iteration_5).
+- [x] **Bug fix (P0)**: Aula mostrando mesmo vídeo ao trocar de aula — adicionado `key={embed}` no iframe, `key={`video-${id}`}` na `<section>` pai, `setAula(null)` antes do fetch em `useEffect([id, user?.id])`. Atualizado Supabase: todas as 21 aulas agora têm `url_video` distinto (via Management API / service_role). Verificado pelo testing agent (iteration_6).
+
 ## ⚠️ Configurações PENDENTES no Supabase (a cargo do usuário)
 O teste E2E apontou 3 bloqueadores server-side:
 
