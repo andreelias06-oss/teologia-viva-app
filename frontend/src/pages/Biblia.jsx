@@ -10,6 +10,7 @@ import { callCleverTask } from '../lib/ai';
 import { useAuth } from '../contexts/AuthContext';
 import { canUseAI, incrementAICalls } from '../lib/plan';
 import { loadChapterNotes, upsertVerseNote, COLOR_MAP } from '../lib/bibleNotes';
+import VerseExplanation from '../components/VerseExplanation';
 import { toast } from 'sonner';
 
 export default function Biblia() {
@@ -112,15 +113,14 @@ export default function Biblia() {
       toast.error(`Limite diário de ${check.limit} consultas atingido. Upgrade para Premium.`);
       return;
     }
-    setExplaining(true);
     setExplanation('');
     setExplanationKey((k) => k + 1);
+    setExplaining(true);
     try {
       const prompt = `Explique de forma clara, devocional e teologicamente fiel o seguinte versículo bíblico em português:\n\nReferência: ${book?.nome} ${chapter}:${selectedVerse.number}\nTexto: "${selectedVerse.text}"\n\nIncentive aplicação prática à vida cristã.`;
       const ans = await callCleverTask(prompt);
       incrementAICalls(user?.id);
       setExplanation(ans);
-      setExplanationKey((k) => k + 1);
     } catch (e) {
       toast.error('Falha ao consultar a IA');
     } finally {
@@ -188,8 +188,8 @@ export default function Biblia() {
                   >
                     <span className="verse-num">{v.number}</span>
                     <span>{v.text}</span>
-                    {isFav && <Bookmark size={11} className="inline ml-1 -mt-1 text-gold-muted" fill="currentColor" />}
-                    {note?.observacao && <span className="ml-1 text-[10px] align-top text-gold-muted">✎</span>}
+                    {isFav ? <Bookmark size={11} className="inline ml-1 -mt-1 text-gold-muted" fill="currentColor" /> : null}
+                    {note?.observacao ? <span className="ml-1 text-[10px] align-top text-gold-muted">✎</span> : null}
                     <span> </span>
                   </button>
                 );
@@ -256,7 +256,11 @@ export default function Biblia() {
             </DrawerDescription>
           </DrawerHeader>
 
-          <div className="overflow-y-auto px-5 py-4 space-y-5" style={{ paddingBottom: '120px' }}>
+          <div
+            key={`verse-drawer-${selectedVerse?.number ?? 'none'}`}
+            className="overflow-y-auto px-5 py-4 space-y-5"
+            style={{ paddingBottom: '120px' }}
+          >
             {/* Section: Destacar */}
             <section>
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
@@ -327,7 +331,7 @@ export default function Biblia() {
                   {savingObs ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Save size={14} className="mr-2" />}
                   Salvar
                 </Button>
-                {currentNote?.observacao && (
+                {currentNote?.observacao ? (
                   <Button
                     data-testid="btn-excluir-obs"
                     onClick={async () => { setDraftObs(''); await persist({ observacao: null }); toast.success('Observação removida'); }}
@@ -336,7 +340,7 @@ export default function Biblia() {
                   >
                     <Trash2 size={14} />
                   </Button>
-                )}
+                ) : null}
               </div>
             </section>
 
@@ -351,24 +355,14 @@ export default function Biblia() {
                 disabled={explaining}
                 className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
               >
-                {explaining ? <><Loader2 size={16} className="mr-2 animate-spin" /> Refletindo…</> : <><Sparkles size={16} className="mr-2" /> Explicar com IA</>}
+                {explaining ? (
+                  <><Loader2 size={16} className="mr-2 animate-spin" /> Refletindo…</>
+                ) : (
+                  <><Sparkles size={16} className="mr-2" /> Explicar com IA</>
+                )}
               </Button>
               <div key={`explanation-slot-${explanationKey}`} className="mt-3">
-                {explaining ? (
-                  <div className="rounded-xl border border-gold/15 bg-navy-light/40 p-4 space-y-2">
-                    <Skeleton className="h-3 w-3/4 bg-navy-dark/60" />
-                    <Skeleton className="h-3 w-full bg-navy-dark/60" />
-                    <Skeleton className="h-3 w-5/6 bg-navy-dark/60" />
-                    <Skeleton className="h-3 w-2/3 bg-navy-dark/60" />
-                  </div>
-                ) : explanation ? (
-                  <div className="rounded-xl border border-gold/15 bg-navy-light/40 p-4">
-                    <p
-                      className="text-foreground/90 font-sans whitespace-pre-wrap leading-relaxed text-sm"
-                      data-testid="verse-explanation"
-                    >{explanation}</p>
-                  </div>
-                ) : null}
+                <VerseExplanation loading={explaining} text={explanation} />
               </div>
             </section>
           </div>

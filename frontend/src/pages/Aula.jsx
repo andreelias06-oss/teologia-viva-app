@@ -34,9 +34,13 @@ export default function Aula() {
   const plan = effectivePlan(profile);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setAula(null);
+    setCompleted(false);
     (async () => {
-      setLoading(true);
       const { data } = await supabase.from('aulas').select('*').eq('id', id).maybeSingle();
+      if (!active) return;
       setAula(data);
       if (data?.curso_id && user?.id) {
         try {
@@ -47,6 +51,7 @@ export default function Aula() {
       }
       setLoading(false);
     })();
+    return () => { active = false; };
   }, [id, user?.id]);
 
   const accessible = aula ? canAccessLesson(profile, aula) : true;
@@ -126,8 +131,13 @@ export default function Aula() {
       ) : null}
 
       {embed ? (
-        <section className="rounded-2xl overflow-hidden border border-gold/20 bg-black aspect-video" data-testid="aula-video">
+        <section
+          key={`video-${id}`}
+          className="rounded-2xl overflow-hidden border border-gold/20 bg-black aspect-video"
+          data-testid="aula-video"
+        >
           <iframe
+            key={embed}
             src={embed}
             title={aula.titulo || 'Aula'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -136,8 +146,12 @@ export default function Aula() {
           />
         </section>
       ) : (aula.url_video || aula.video_url) ? (
-        <section className="rounded-2xl overflow-hidden border border-gold/20 bg-black" data-testid="aula-video">
-          <video src={aula.url_video || aula.video_url} controls className="w-full" />
+        <section
+          key={`video-file-${id}`}
+          className="rounded-2xl overflow-hidden border border-gold/20 bg-black"
+          data-testid="aula-video"
+        >
+          <video key={aula.url_video || aula.video_url} src={aula.url_video || aula.video_url} controls className="w-full" />
         </section>
       ) : null}
 

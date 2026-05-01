@@ -1,0 +1,71 @@
+{
+  "summary": "Frontend regression for two reported P0 bugs: (Bug1) Bíblia 'Explicar com IA' insertBefore crash — VERIFIED FIXED. (Bug2) Aula iframe video not changing across aulas — Frontend code fix is correct (reactive keys + state reset), but actual cause is SEED DATA: ALL 21 aulas in Supabase have identical url_video ('https://www.youtube.com/watch?v=L_LUpnjgPso'). User-perceived 'same video' is a data problem, not a React rendering problem. Regression of highlight, favorite (Promessas/Estudos), observação pessoal, and other tabs (Início, Academia, Comunidade, Eventos) all OK.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "data_issues": [
+    {
+      "table": "aulas (Supabase)",
+      "issue": "All 21 aulas share the same url_video value 'https://www.youtube.com/watch?v=L_LUpnjgPso'. As long as data is identical, the iframe will display the same video across aulas regardless of any front-end key/reset logic.",
+      "evidence": "Verified via Supabase REST GET /rest/v1/aulas with authenticated user — Counter shows count=21 for the same URL.",
+      "priority": "HIGH",
+      "suggested_fix": "Update seed data so each aula has a distinct url_video (or run a migration script that assigns different YouTube IDs per aula). The frontend already remounts the iframe correctly when src changes (key={embed} on iframe + key={`video-${id}`} on parent + state reset on id change in Aula.jsx)."
+    }
+  ],
+  "verification_evidence": {
+    "bug1_biblia_ai_insertBefore": {
+      "status": "FIXED",
+      "tests_run": [
+        "Open Bíblia → click verse → click 'Explicar com IA' → wait → verify explanation rendered",
+        "Without closing app, click another verse → click 'Explicar com IA' again → verify explanation",
+        "Combined flow: highlight + favorite + save observação + AI explain (same drawer) → close → new verse + AI explain"
+      ],
+      "result": "Two successive AI invocations each returned coherent text (894 and 1744 chars). PAGEERROR list empty across all runs. No 'Failed to execute insertBefore' anywhere in console."
+    },
+    "bug2_aula_video_changes": {
+      "status": "CODE FIX OK / DATA BUG REMAINS",
+      "tests_run": [
+        "Sign in fresh user → /curso/1 → click aula-item-35 (Introdução à Teologia) → capture iframe src",
+        "Back to curso → click aula-item-37 (Hermenêutica Bíblica) → capture iframe src",
+        "Direct URL revisit /aula/35 → capture iframe src",
+        "Cross-check Supabase REST aulas table"
+      ],
+      "result": "iframe src values: aula 35 = aula 37 = aula 35 (revisit) = embed/L_LUpnjgPso. Supabase confirms ALL 21 aulas share the SAME url_video. Frontend Aula.jsx applies useEffect reset on id, key={embed} on iframe, and key={`video-${id}`} on parent — these will correctly switch videos as soon as data is differentiated."
+    },
+    "regression": {
+      "highlight_yellow": "OK (verse-2 highlighted)",
+      "favorito_promessas": "OK (toast 'Salvo em Promessas')",
+      "observacao_save": "OK (toast 'Observação salva')",
+      "ai_explain_after_save": "OK (no crash, explanation rendered)",
+      "tabs": "Início, Academia, Comunidade, Eventos all loaded without errors"
+    }
+  },
+  "test_report_links": [],
+  "action_items": [
+    "DATA FIX (HIGH): Update Supabase aulas table — assign distinct url_video values per aula (or per curso). Without this, the iframe will continue to look identical across aulas to the user.",
+    "Optional: add a one-off SQL migration in /app/scripts to UPDATE public.aulas SET url_video = ... per id with sample YouTube IDs."
+  ],
+  "critical_code_review_comments": [
+    "Aula.jsx — fix is correct: useEffect resets aula+completed on id change, iframe has key={embed}, parent section has key={`video-${id}`}. Will work as soon as data differs.",
+    "Biblia.jsx — VerseExplanation extracted into its own component and wrapped with explanationKey for forced remount; this is a sound mitigation for the React reconciliation crash that previous testing reported.",
+    "Aula.jsx line 38-39: `setAula(null); setCompleted(false)` is correctly placed BEFORE the async fetch so the iframe unmounts during transition — good.",
+    "Both files keep keys reasonably; nothing else to flag."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% on tested flows"},
+  "test_credentials": "Fresh signups via /auth → 'Criar conta' tab with test+<timestamp>@teologia.test / TestPass123",
+  "seed_data_creation": "Created multiple Supabase auth users during testing (test+<ts>@teologia.test). No app-side seed data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug 1 (insertBefore in Bíblia AI) is fully fixed and verified. Bug 2 is NOT a frontend issue — Supabase aulas table contains identical url_video for every aula (verified via REST). Once the main agent updates the seed data, retest with two aulas that have different url_video to confirm the iframe switches; the existing key={embed} logic should already work. Use Supabase auth signup via UI for fresh sessions.",
+  "rca of the issue": {
+    "bug1": "Previous testing reported 'Failed to execute insertBefore on Node' when toggling AI explanation inside the Drawer. RCA: rapid skeleton ↔ paragraph swap conflicted with Drawer's Vaul reconciliation (sibling text nodes). Mitigation applied by main agent: extracted VerseExplanation into its own component, wrapped it in a div with key={`explanation-slot-${explanationKey}`}, and added key on the drawer's scrolling content tied to selectedVerse.number. Verified: zero pageerrors across multiple verse+AI invocations.",
+    "bug2": "RCA: NOT a React rendering bug. All 21 rows in public.aulas have identical url_video. Even with perfect React keying, iframe will appear unchanged because the underlying data is identical. The fix-up belongs in the database, not in Aula.jsx. The frontend changes (state reset on id, key={embed} on iframe, key={`video-${id}`} on parent) are still beneficial defensively and will correctly differentiate when data differs."
+  }
+}
