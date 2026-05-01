@@ -3,6 +3,10 @@ import { supabase } from '../lib/supabase';
 import { Skeleton } from '../components/ui/skeleton';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Users, GraduationCap, ChevronRight } from 'lucide-react';
+import StreakBadge from '../components/StreakBadge';
+import { registerDevoRead, reachedMilestone, getStreak } from '../lib/streak';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 const HERO_BG =
   'https://images.unsplash.com/photo-1564182910735-f4084c663978?crop=entropy&cs=srgb&fm=jpg&w=900&q=80';
@@ -15,7 +19,9 @@ function todayISO() {
 export default function Inicio() {
   const [devocional, setDevocional] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [streak, setStreak] = useState({ current_streak: 0, best_streak: 0, last_devo_date: null });
   const navigate = useNavigate();
+  const { profile, refreshProfile } = useAuth();
 
   useEffect(() => {
     (async () => {
@@ -37,8 +43,30 @@ export default function Inicio() {
           .maybeSingle();
         setDevocional(latest);
       }
+
+      // Initial streak from profile
+      const init = await getStreak(profile);
+      setStreak(init);
+
+      // Register today's devotional read (idempotent: only counts first time per day)
+      const prev = init.current_streak || 0;
+      const wasToday = init.last_devo_date === todayISO();
+      const result = await registerDevoRead();
+      setStreak(result);
+      if (!wasToday && result.current_streak > prev) {
+        const milestone = reachedMilestone(prev, result.current_streak);
+        if (milestone) {
+          toast.success(`🕯️ ${milestone} dias seguidos! Que sua jornada continue iluminada.`, { duration: 5000 });
+        } else if (result.current_streak >= 2) {
+          toast.success(`Ofensiva ${result.current_streak} dias 🕯️`, { duration: 3000 });
+        }
+        // refresh profile so Perfil shows updated values
+        try { await refreshProfile?.(); } catch { /* ignore */ }
+      }
+
       setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
@@ -50,6 +78,8 @@ export default function Inicio() {
         <h2 className="font-serif text-3xl text-foreground mt-1 mb-1">Devocional do dia</h2>
         <div className="gold-divider w-16" />
       </section>
+
+      <StreakBadge current={streak.current_streak} best={streak.best_streak} />
 
       {loading ? (
         <div className="space-y-3">

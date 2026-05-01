@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
 import { effectivePlan, trialDaysLeft, getAICallsToday, PLAN } from '../lib/plan';
 import { LogOut, NotebookPen, Sparkles, Crown } from 'lucide-react';
+import StreakBadge from '../components/StreakBadge';
 
 export default function Perfil() {
   const { user, profile, signOut } = useAuth();
@@ -60,6 +61,11 @@ export default function Perfil() {
         <p className="font-serif text-xl text-foreground" data-testid="perfil-email">{user?.email}</p>
         {profile?.nome && <p className="text-foreground/70 text-sm font-sans">{profile.nome}</p>}
       </div>
+
+      <StreakBadge
+        current={profile?.current_streak || 0}
+        best={profile?.best_streak || 0}
+      />
 
       <div className={`rounded-2xl border p-5 space-y-3 ${plan === PLAN.PREMIUM ? 'border-gold bg-gold/10' : 'border-gold/20 bg-navy-light/30'}`}>
         <div className="flex items-center justify-between">
