@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { listRows, createRow, updateRow, deleteRow } from '../../lib/admin';
+import { supabase, SUPABASE } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import AdminFormDrawer from '../../components/AdminFormDrawer';
 import { toast } from 'sonner';
 
@@ -25,6 +26,7 @@ export default function AdminDevocionais() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -54,17 +56,63 @@ export default function AdminDevocionais() {
     catch (e) { toast.error('Falha ao excluir'); }
   };
 
+  const gerarComIA = async () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (rows.some((r) => r.data === hoje)) {
+      if (!window.confirm('Já existe devocional para hoje. Substituir pelo novo gerado pela IA?')) return;
+    }
+    setGenerating(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token || SUPABASE.anonKey;
+      const res = await fetch(`${SUPABASE.url}/functions/v1/generate-daily-devotional`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE.anonKey,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ date: hoje, force: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Falha');
+      toast.success(`Devocional gerado: "${data.devocional?.titulo}"`);
+      load();
+    } catch (e) {
+      toast.error(e.message || 'Falha ao gerar com IA');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-4" data-testid="admin-devocionais">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="font-serif text-2xl text-foreground">Devocionais</h2>
-        <Button
-          data-testid="admin-devocionais-novo"
-          onClick={() => { setEditing(null); setOpen(true); }}
-          className="bg-gold text-navy-dark hover:bg-gold-soft h-10"
-        >
-          <Plus size={16} className="mr-1" /> Novo
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            data-testid="admin-devocionais-gerar-ia"
+            onClick={gerarComIA}
+            disabled={generating}
+            variant="outline"
+            className="border-gold/40 text-gold hover:bg-gold/10 h-10"
+          >
+            {generating ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Sparkles size={14} className="mr-1" />}
+            Gerar IA
+          </Button>
+          <Button
+            data-testid="admin-devocionais-novo"
+            onClick={() => { setEditing(null); setOpen(true); }}
+            className="bg-gold text-navy-dark hover:bg-gold-soft h-10"
+          >
+            <Plus size={16} className="mr-1" /> Novo
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gold/15 bg-navy-light/20 p-3 text-xs font-sans text-foreground/70">
+        <Sparkles size={12} className="inline mr-1 text-gold" />
+        Um devocional é gerado e publicado automaticamente todo dia às 02:00 (BRT) via IA. Use <span className="text-gold">Gerar IA</span> para criar/substituir o de hoje manualmente.
       </div>
 
       {loading ? <Skeleton className="h-20 w-full bg-navy-light/40" /> : (
