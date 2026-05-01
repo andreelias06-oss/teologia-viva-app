@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend regression for Bíblia multi-select + ErrorBoundary + Aula video. All 7 scenarios from the review request passed end-to-end with 0 console errors. Tested as a fresh signup on the public URL with mobile viewport 420x900.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    {"id": "T1", "name": "Tap verse 3 → selection bar appears, drawer NOT auto-opened", "result": "PASS", "evidence": "selection-bar text='1 VERSÍCULO\\nJoão 3:3\\nMenu de estudo'; drawer-ref not visible"},
+    {"id": "T2", "name": "Tap v3, v4, v5 → bar shows '3 versículos / João 3:3-5'; X clears", "result": "PASS", "evidence": "bar='3 VERSÍCULOS\\nJoão 3:3-5'; after selection-clear bar gone"},
+    {"id": "T3", "name": "Non-contiguous v3 + v5 → 'João 3:3, 5'; Menu de estudo opens drawer with both verses stacked", "result": "PASS", "evidence": "drawer-ref='João 3:3, 5'; description shows both verse 3 and verse 5 texts as separate blocks"},
+    {"id": "T4", "name": "Explicar com IA on combined v3+v5 → response loads; no insertBefore errors; ErrorBoundary intact", "result": "PASS", "evidence": "explanation rendered; 0 console errors; error-boundary-fallback NOT triggered"},
+    {"id": "T5", "name": "highlight-yellow with 2 verses selected → both highlighted after drawer closes", "result": "PASS", "evidence": "v3 bg=rgba(234,179,8,0.3), v5 bg=rgba(234,179,8,0.3), v4 bg=transparent"},
+    {"id": "T6", "name": "Single verse → obs textarea visible; multi-select → hint replaces textarea", "result": "PASS", "evidence": "Single (v7): verse-obs-input present. Multi (v7+v8): textarea absent, hint 'Selecione apenas 1 para adicionar uma observação' visible"},
+    {"id": "T7", "name": "Aula 1 and Aula 2 iframes load with original L_LUpnjgPso video; no React crash", "result": "PASS", "evidence": "Aula 1 iframe src=https://www.youtube.com/embed/L_LUpnjgPso; Aula 2 iframe src=https://www.youtube.com/embed/L_LUpnjgPso; navigation between aulas clean, 0 errors"}
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Biblia.jsx is 532 lines and combines reader, selection bar, two pickers and the study drawer. Splitting it (e.g., SelectionBar, StudyDrawer subcomponents) would help maintainability but is not blocking.",
+    "ErrorBoundary.jsx correctly resets via resetKey when selection changes — implementation is clean and aligned with what was requested.",
+    "Aula.jsx iframe uses key={embed}; since all 21 aulas now share the same video URL, the iframe key won't change between aulas — that is intentional per current spec but may cause the YouTube player to NOT reset between aulas (autoplay state retained). Acceptable today; flag if business asks for distinct videos later.",
+    "Drawer description region for selected verses scrolls (max-h-32) which is good for many-verse selections."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100% (7/7 scenarios)"},
+  "test_credentials": "Fresh signup test+<timestamp>@teologia.test / TestPass123 via Supabase",
+  "seed_data_creation": "None — used live Supabase Bible chapter data (João 3) and existing aulas seeded by the app.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 user-requested changes verified in iteration 7 (multi-select Bíblia toggle UX with floating action bar, ErrorBoundary around AI explanation with key={selectionKey}, Aula iframe still uses key={embed} and shows L_LUpnjgPso). No flakes observed; 0 console errors during the entire flow.",
+  "rca of the issue": "N/A — no issues found"
+}
