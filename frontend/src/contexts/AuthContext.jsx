@@ -39,14 +39,15 @@ export function AuthProvider({ children }) {
       if (!mounted) return;
       setSession(data.session);
       setUser(data.session?.user || null);
-      if (data.session?.user) await loadProfile(data.session.user.id);
       setLoading(false);
+      // Load profile in background so loader unblocks quickly
+      if (data.session?.user) loadProfile(data.session.user.id);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, sess) => {
       setSession(sess);
       setUser(sess?.user || null);
-      if (sess?.user) await loadProfile(sess.user.id);
+      if (sess?.user) loadProfile(sess.user.id);
       else setProfile(null);
     });
     return () => {

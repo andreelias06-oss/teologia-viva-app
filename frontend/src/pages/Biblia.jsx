@@ -152,11 +152,11 @@ export default function Biblia() {
 
       {/* Book / Chapter pickers */}
       <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
-        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[80vh]">
+        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[80vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="font-serif text-2xl text-gold">Escolher livro</SheetTitle>
           </SheetHeader>
-          <div className="overflow-y-auto h-full pb-10 space-y-6 mt-4">
+          <div className="pb-10 space-y-6 mt-4">
             {[
               { label: 'Antigo Testamento', list: BOOKS.filter((b) => b.ot) },
               { label: 'Novo Testamento', list: BOOKS.filter((b) => !b.ot) },
@@ -187,11 +187,11 @@ export default function Biblia() {
       </Sheet>
 
       <Sheet open={chapterPickerOpen} onOpenChange={setChapterPickerOpen}>
-        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[60vh]">
+        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[60vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="font-serif text-2xl text-gold">{book?.nome} — Capítulo</SheetTitle>
           </SheetHeader>
-          <div className="overflow-y-auto h-full pb-10 mt-4">
+          <div className="pb-10 mt-4">
             <div className="grid grid-cols-6 gap-2">
               {Array.from({ length: book?.chapters || 1 }, (_, i) => i + 1).map((n) => (
                 <button
