@@ -64,7 +64,8 @@ export function canUseAI(profile, userId) {
 export function canAccessLesson(profile, aula) {
   const plan = effectivePlan(profile);
   if (plan === PLAN.PREMIUM || plan === PLAN.TRIAL) return true;
-  // Free users: only the first lesson (ordem === 1) or aulas marked .free
+  // Free users: explicit is_premium=false wins; otherwise only the first lesson
+  if (aula?.is_premium === false) return true;
   if (aula?.free === true) return true;
   if (aula?.ordem === 1 || aula?.ordem === '1') return true;
   return false;

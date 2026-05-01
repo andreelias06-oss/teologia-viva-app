@@ -63,15 +63,15 @@ export default function Comunidade() {
     if (!user?.id) { toast.error('Faça login'); return; }
     if (iPrayed[p.id]) return;
     setIPrayed((m) => ({ ...m, [p.id]: true }));
-    setPedidos((arr) => arr.map((x) => x.id === p.id ? { ...x, contador_oracoes: (x.contador_oracoes || 0) + 1 } : x));
+    setPedidos((arr) => arr.map((x) => x.id === p.id ? { ...x, contagem_oracoes: (x.contagem_oracoes || 0) + 1 } : x));
     try {
       await supabase.from('interacoes_oracao').insert({ oracao_id: p.id, user_id: user.id });
-      const novo = (p.contador_oracoes || 0) + 1;
-      await supabase.from('mural_oracoes').update({ contador_oracoes: novo }).eq('id', p.id);
+      const novo = (p.contagem_oracoes || 0) + 1;
+      await supabase.from('mural_oracoes').update({ contagem_oracoes: novo }).eq('id', p.id);
     } catch {
       // revert on failure
       setIPrayed((m) => { const c = { ...m }; delete c[p.id]; return c; });
-      setPedidos((arr) => arr.map((x) => x.id === p.id ? { ...x, contador_oracoes: Math.max(0, (x.contador_oracoes || 1) - 1) } : x));
+      setPedidos((arr) => arr.map((x) => x.id === p.id ? { ...x, contagem_oracoes: Math.max(0, (x.contagem_oracoes || 1) - 1) } : x));
       toast.error('Não foi possível registrar — tente novamente');
     }
   };
@@ -82,9 +82,10 @@ export default function Comunidade() {
     try {
       const payload = {
         user_id: user.id,
-        autor_nome: autorNome?.trim() || profile?.nome || 'Anônimo',
+        nome_usuario: autorNome?.trim() || profile?.nome || 'Anônimo',
         pedido: pedido.trim(),
-        contador_oracoes: 0,
+        is_anonimo: !autorNome?.trim() && !profile?.nome,
+        contagem_oracoes: 0,
         created_at: new Date().toISOString(),
       };
       const { error } = await supabase.from('mural_oracoes').insert(payload);
@@ -177,14 +178,14 @@ export default function Comunidade() {
                 className="rounded-2xl border border-gold/15 bg-navy-light/30 p-5 space-y-3"
               >
                 <div className="flex items-center justify-between">
-                  <p className="font-serif text-base text-gold/90">{p.autor_nome || 'Anônimo'}</p>
+                  <p className="font-serif text-base text-gold/90">{p.is_anonimo ? 'Anônimo' : (p.nome_usuario || p.autor_nome || 'Anônimo')}</p>
                   <p className="text-[10px] uppercase tracking-[0.15em] text-foreground/50">{formatDate(p.created_at)}</p>
                 </div>
                 <p className="text-foreground/90 font-sans leading-relaxed text-[15px] whitespace-pre-wrap">{p.pedido}</p>
                 <div className="flex items-center justify-between pt-2">
                   <div className="flex items-center gap-1.5 text-gold/80 text-xs font-sans">
                     <Heart size={14} fill="currentColor" />
-                    <span data-testid={`pedido-contador-${p.id}`}>{p.contador_oracoes || 0} {((p.contador_oracoes || 0) === 1) ? 'pessoa orou' : 'pessoas oraram'}</span>
+                    <span data-testid={`pedido-contador-${p.id}`}>{p.contagem_oracoes || 0} {((p.contagem_oracoes || 0) === 1) ? 'pessoa orou' : 'pessoas oraram'}</span>
                   </div>
                   <Button
                     data-testid={`btn-vou-orar-${p.id}`}

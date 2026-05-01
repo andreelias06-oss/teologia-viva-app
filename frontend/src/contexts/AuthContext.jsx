@@ -80,7 +80,6 @@ export function AuthProvider({ children }) {
         /* ignore */
       }
     }
-
     // Supabase may return user auto-confirmed but session=null depending on project settings.
     // If user is confirmed (email_confirmed_at present) and we have their password, sign them in now.
     if (!data.session && data.user?.email_confirmed_at) {

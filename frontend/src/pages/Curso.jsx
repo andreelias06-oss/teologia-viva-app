@@ -58,15 +58,15 @@ export default function Curso() {
       ) : (
         <>
           <header className="rounded-2xl border border-gold/20 bg-navy-light/30 overflow-hidden">
-            {(curso.capa_url || curso.thumbnail) && (
+            {(curso.imagem_capa || curso.capa_url) && (
               <div className="h-36 relative">
-                <img src={curso.capa_url || curso.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <img src={curso.imagem_capa || curso.capa_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-navy-dark/90" />
               </div>
             )}
             <div className="p-5 space-y-3">
               <h2 className="font-serif text-3xl text-foreground" data-testid="curso-titulo">
-                {curso.nome || curso.titulo}
+                {curso.titulo || curso.nome}
               </h2>
               {curso.descricao && (
                 <p className="text-foreground/75 text-sm font-sans leading-relaxed">{curso.descricao}</p>

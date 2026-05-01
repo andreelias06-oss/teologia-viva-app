@@ -92,7 +92,7 @@ export default function Inicio() {
           className="relative overflow-hidden rounded-2xl border border-gold/20 shadow-2xl"
         >
           <div className="relative h-44">
-            <img src={HERO_BG} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <img src={devocional.imagem_url || HERO_BG} alt="" className="absolute inset-0 w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-b from-navy-dark/60 via-navy/70 to-navy-dark" />
             <div className="absolute inset-0 flex items-end p-6">
               <h3 className="font-serif text-3xl leading-tight text-foreground" data-testid="devocional-titulo">
@@ -103,17 +103,23 @@ export default function Inicio() {
           <div className="bg-navy-light/40 backdrop-blur-sm p-6 space-y-4">
             <blockquote className="border-l-2 border-gold pl-4 py-1">
               <p className="font-serif italic text-xl leading-relaxed text-gold/95" data-testid="devocional-versiculo">
-                "{devocional.versiculo}"
+                "{devocional.versiculo_texto || devocional.versiculo}"
               </p>
-              {devocional.referencia && (
+              {(devocional.referencia_biblica || devocional.referencia) && (
                 <cite className="not-italic block mt-2 text-xs uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">
-                  {devocional.referencia}
+                  {devocional.referencia_biblica || devocional.referencia}
                 </cite>
               )}
             </blockquote>
             <p className="text-foreground/85 leading-relaxed font-sans drop-cap" data-testid="devocional-reflexao">
               {devocional.reflexao}
             </p>
+            {devocional.oracao_sugerida && (
+              <div className="mt-4 pt-4 border-t border-gold/15">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold mb-2">Oração sugerida</p>
+                <p className="text-foreground/80 font-sans italic leading-relaxed">{devocional.oracao_sugerida}</p>
+              </div>
+            )}
           </div>
         </article>
       ) : (

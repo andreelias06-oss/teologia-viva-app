@@ -55,6 +55,7 @@ export default function Eventos() {
     (async () => {
       setLoading(true);
       try {
+        // localizacao is PostGIS geography — use an RPC helper if available, or select with lat/lng fields if present
         const { data, error } = await supabase
           .from('eventos_comunidade')
           .select('*')
@@ -63,8 +64,15 @@ export default function Eventos() {
         if (error) throw error;
         const within = (data || [])
           .map((e) => {
-            if (e.latitude == null || e.longitude == null) return null;
-            const km = haversineKm(coords.lat, coords.lon, Number(e.latitude), Number(e.longitude));
+            // Try multiple location representations: explicit lat/lon cols, or parse geography WKT
+            let lat = e.latitude != null ? Number(e.latitude) : null;
+            let lon = e.longitude != null ? Number(e.longitude) : null;
+            if ((lat == null || lon == null) && typeof e.localizacao === 'string') {
+              const m = e.localizacao.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
+              if (m) { lon = Number(m[1]); lat = Number(m[2]); }
+            }
+            if (lat == null || lon == null) return null;
+            const km = haversineKm(coords.lat, coords.lon, lat, lon);
             return { ...e, distancia_km: km };
           })
           .filter((e) => e && e.distancia_km <= 20)

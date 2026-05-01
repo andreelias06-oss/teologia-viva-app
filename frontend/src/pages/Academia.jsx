@@ -19,12 +19,13 @@ export default function Academia() {
     (async () => {
       setLoading(true);
       const [{ data: eixosData }, { data: cursosData }] = await Promise.all([
-        supabase.from('eixos').select('*').order('ordem', { ascending: true }),
-        supabase.from('cursos').select('*').order('ordem', { ascending: true }),
+        supabase.from('eixos').select('*').order('id', { ascending: true }),
+        supabase.from('cursos').select('*').order('id', { ascending: true }),
       ]);
       setEixos(eixosData || []);
       setCursos(cursosData || []);
-      setActiveEixo((eixosData && eixosData[0]?.id) || null);
+      // Default to "Todos" (null) so user sees all courses up front
+      setActiveEixo(null);
       setLoading(false);
     })();
   }, []);
@@ -46,6 +47,17 @@ export default function Academia() {
       ) : (
         <div className="-mx-5 px-5 overflow-x-auto no-scrollbar">
           <div className="flex gap-2">
+            <button
+              data-testid="eixo-pill-all"
+              onClick={() => setActiveEixo(null)}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-sans tracking-wide uppercase transition ${
+                activeEixo === null
+                  ? 'bg-gold text-navy-dark border-gold font-semibold'
+                  : 'border-gold/30 text-foreground/75 hover:border-gold/60'
+              }`}
+            >
+              Todos
+            </button>
             {eixos.map((e) => (
               <button
                 key={e.id}
@@ -57,7 +69,7 @@ export default function Academia() {
                     : 'border-gold/30 text-foreground/75 hover:border-gold/60'
                 }`}
               >
-                {e.nome || e.titulo || `Eixo ${e.ordem}`}
+                {e.nome || e.titulo || `Eixo ${e.id}`}
               </button>
             ))}
           </div>
@@ -75,8 +87,8 @@ export default function Academia() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((c, idx) => {
-            const blocked = plan === 'free' && idx > 0; // free vê só o primeiro curso
+          {filtered.map((c) => {
+            const blocked = plan === 'free' && c.is_premium === true;
             return (
               <li key={c.id}>
                 <button
@@ -85,14 +97,14 @@ export default function Academia() {
                   className="w-full text-left flex items-center gap-4 rounded-2xl border border-gold/15 bg-navy-light/30 p-4 transition hover:border-gold/40 active:scale-[0.99]"
                 >
                   <div className="w-14 h-14 shrink-0 rounded-xl border border-gold/30 flex items-center justify-center text-gold bg-navy-dark/40 overflow-hidden">
-                    {c.capa_url || c.thumbnail ? (
-                      <img src={c.capa_url || c.thumbnail} alt="" className="w-full h-full object-cover" />
+                    {c.imagem_capa || c.capa_url ? (
+                      <img src={c.imagem_capa || c.capa_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <BookMarked size={20} strokeWidth={1.5} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-serif text-lg text-foreground truncate">{c.nome || c.titulo}</p>
+                    <p className="font-serif text-lg text-foreground truncate">{c.titulo || c.nome}</p>
                     {c.descricao && (
                       <p className="text-xs font-sans text-foreground/60 line-clamp-2 mt-0.5">{c.descricao}</p>
                     )}

@@ -44,7 +44,7 @@ export default function Aula() {
   }, [id, user?.id]);
 
   const accessible = aula ? canAccessLesson(profile, aula) : true;
-  const embed = useMemo(() => youtubeEmbed(aula?.video_url), [aula]);
+  const embed = useMemo(() => youtubeEmbed(aula?.url_video || aula?.video_url), [aula]);
 
   const markComplete = () => {
     if (!aula?.curso_id || !user?.id) return;
@@ -60,7 +60,7 @@ export default function Aula() {
   };
 
   const contextoTutor = aula
-    ? `Aula: ${aula.titulo}\n\nLeitura bíblica: ${aula.leitura_biblica || '—'}\n\nTexto de apoio: ${(aula.texto_apoio || '').slice(0, 1500)}`
+    ? `Aula: ${aula.titulo}\n\nLeitura bíblica: ${aula.leitura_biblica || '—'}\n\nTexto de apoio: ${(aula.conteudo_texto || aula.texto_apoio || aula.descricao || '').slice(0, 1500)}`
     : '';
 
   if (loading) {
@@ -129,14 +129,16 @@ export default function Aula() {
             className="w-full h-full"
           />
         </section>
-      ) : aula.video_url ? (
-        <video src={aula.video_url} controls className="w-full rounded-2xl border border-gold/20" data-testid="aula-video" />
+      ) : (aula.url_video || aula.video_url) ? (
+        <video src={aula.url_video || aula.video_url} controls className="w-full rounded-2xl border border-gold/20" data-testid="aula-video" />
       ) : null}
 
-      {aula.texto_apoio && (
+      {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) && (
         <section className="space-y-3" data-testid="aula-texto-apoio">
           <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Texto de apoio</p>
-          <article className="text-foreground/85 leading-relaxed font-sans whitespace-pre-wrap">{aula.texto_apoio}</article>
+          <article className="text-foreground/85 leading-relaxed font-sans whitespace-pre-wrap">
+            {aula.conteudo_texto || aula.texto_apoio || aula.descricao}
+          </article>
         </section>
       )}
 
