@@ -5,8 +5,9 @@ import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
 import { effectivePlan, trialDaysLeft, getAICallsToday, PLAN } from '../lib/plan';
-import { LogOut, NotebookPen, Sparkles, Crown } from 'lucide-react';
+import { LogOut, NotebookPen, Sparkles, Crown, Shield } from 'lucide-react';
 import StreakBadge from '../components/StreakBadge';
+import { isAdmin } from '../lib/admin';
 
 export default function Perfil() {
   const { user, profile, signOut } = useAuth();
@@ -129,6 +130,16 @@ export default function Perfil() {
         >
           <NotebookPen size={16} className="mr-2 text-gold" /> Minhas Anotações
         </Button>
+        {isAdmin(profile) && (
+          <Button
+            data-testid="btn-admin"
+            variant="outline"
+            onClick={() => navigate('/admin')}
+            className="border-gold text-gold bg-gold/5 hover:bg-gold/15 h-12 justify-start"
+          >
+            <Shield size={16} className="mr-2" /> Painel de Curadoria
+          </Button>
+        )}
         <Button
           data-testid="btn-sair"
           variant="outline"

@@ -13,6 +13,12 @@ import Comunidade from './pages/Comunidade';
 import Eventos from './pages/Eventos';
 import Anotacoes from './pages/Anotacoes';
 import Perfil from './pages/Perfil';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDevocionais from './pages/admin/AdminDevocionais';
+import AdminEixos from './pages/admin/AdminEixos';
+import AdminCursos from './pages/admin/AdminCursos';
+import AdminAulas from './pages/admin/AdminAulas';
+import AdminEventos from './pages/admin/AdminEventos';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -64,6 +70,21 @@ function App() {
               <Route path="/eventos" element={<Eventos />} />
               <Route path="/anotacoes" element={<Anotacoes />} />
               <Route path="/perfil" element={<Perfil />} />
+            </Route>
+            <Route
+              path="/admin"
+              element={
+                <Protected>
+                  <AdminLayout />
+                </Protected>
+              }
+            >
+              <Route index element={<Navigate to="/admin/devocionais" replace />} />
+              <Route path="devocionais" element={<AdminDevocionais />} />
+              <Route path="eixos" element={<AdminEixos />} />
+              <Route path="cursos" element={<AdminCursos />} />
+              <Route path="aulas" element={<AdminAulas />} />
+              <Route path="eventos" element={<AdminEventos />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
