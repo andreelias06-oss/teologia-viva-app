@@ -10,10 +10,16 @@ import { canAccessLesson, effectivePlan } from '../lib/plan';
 import { toast } from 'sonner';
 
 function youtubeEmbed(url) {
-  if (!url) return null;
-  const re = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([\w-]{11})/;
-  const m = url.match(re);
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  // Already an embed URL — use as-is
+  if (/youtube\.com\/embed\//.test(trimmed)) return trimmed.split('&')[0];
+  // Standard patterns
+  const re = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^&]*&)*v=|embed\/|v\/|shorts\/))([\w-]{11})/;
+  const m = trimmed.match(re);
   if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  // Bare 11-char ID
+  if (/^[\w-]{11}$/.test(trimmed)) return `https://www.youtube.com/embed/${trimmed}`;
   return null;
 }
 
@@ -112,35 +118,37 @@ export default function Aula() {
         <h2 className="font-serif text-3xl text-foreground mt-1" data-testid="aula-titulo">{aula.titulo}</h2>
       </header>
 
-      {aula.leitura_biblica && (
+      {aula.leitura_biblica ? (
         <section className="rounded-2xl border border-gold/20 bg-navy-light/30 p-5">
           <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Leitura Bíblica</p>
           <p className="font-serif italic text-xl text-gold/95 leading-relaxed" data-testid="aula-leitura">"{aula.leitura_biblica}"</p>
         </section>
-      )}
+      ) : null}
 
       {embed ? (
         <section className="rounded-2xl overflow-hidden border border-gold/20 bg-black aspect-video" data-testid="aula-video">
           <iframe
             src={embed}
-            title={aula.titulo}
+            title={aula.titulo || 'Aula'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
             className="w-full h-full"
           />
         </section>
       ) : (aula.url_video || aula.video_url) ? (
-        <video src={aula.url_video || aula.video_url} controls className="w-full rounded-2xl border border-gold/20" data-testid="aula-video" />
+        <section className="rounded-2xl overflow-hidden border border-gold/20 bg-black" data-testid="aula-video">
+          <video src={aula.url_video || aula.video_url} controls className="w-full" />
+        </section>
       ) : null}
 
-      {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) && (
+      {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) ? (
         <section className="space-y-3" data-testid="aula-texto-apoio">
           <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Texto de apoio</p>
           <article className="text-foreground/85 leading-relaxed font-sans whitespace-pre-wrap">
             {aula.conteudo_texto || aula.texto_apoio || aula.descricao}
           </article>
         </section>
-      )}
+      ) : null}
 
       <div className="flex flex-col gap-3 sticky bottom-[80px] bg-gradient-to-t from-navy via-navy to-transparent pt-4">
         <Button
