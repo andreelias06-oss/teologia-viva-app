@@ -1,0 +1,49 @@
+{
+  "summary": "Retest for Bug 2 (Aula iframe video not changing). After main agent patched all 21 aulas in Supabase with distinct YouTube URLs, verified that navigating between aulas now displays different iframe src values. All three targeted aulas (35, 37, 38) now render distinct, expected YouTube embeds — both via direct URL navigation and via in-app click-through from the Curso page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_evidence": {
+    "bug2_aula_video_changes": {
+      "status": "FIXED",
+      "test_user": "test+1777645780@teologia.test / TestPass123 (fresh signup via UI)",
+      "direct_url_navigation": {
+        "aula_35": {"title": "Introdução à Teologia", "iframe_src": "https://www.youtube.com/embed/L_LUpnjgPso", "expected_id": "L_LUpnjgPso", "match": true},
+        "aula_37": {"title": "Hermenêutica Bíblica", "iframe_src": "https://www.youtube.com/embed/iWvLO4B3Tq4", "expected_id": "iWvLO4B3Tq4", "match": true},
+        "aula_38": {"title": "A Existência e Atributos de Deus", "iframe_src": "https://www.youtube.com/embed/hsa5hNfsOqc", "expected_id": "hsa5hNfsOqc", "match": true},
+        "all_distinct": true
+      },
+      "in_app_navigation": {
+        "flow": "/curso/1 → click aula-item-35 → back → click aula-item-37",
+        "aula_35_src": "https://www.youtube.com/embed/L_LUpnjgPso",
+        "aula_37_src": "https://www.youtube.com/embed/iWvLO4B3Tq4",
+        "iframe_remounts_and_src_differs": true
+      },
+      "page_errors": "None observed during navigation across the three aulas."
+    }
+  },
+  "observations": [
+    "YouTube reports 'Video unavailable' for embed iWvLO4B3Tq4 (aula 37) in the live player — this is a YouTube content-side issue (video removed/private/region-locked), NOT an app rendering bug. iframe src is correctly set by the app. If desired for UX, the main agent could swap aula 37's url_video with a publicly-embeddable video.",
+    "Aula.jsx logic (useEffect reset on id, key={embed} on iframe, key={`video-${id}`} on parent) works as designed now that data is differentiated."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/LOW: Replace aula 37 (Hermenêutica Bíblica) url_video — current video iWvLO4B3Tq4 returns 'Video unavailable' from YouTube. Not a code bug, but end-users will see the unavailable placeholder."
+  ],
+  "critical_code_review_comments": [
+    "Aula.jsx continues to look correct; no regressions observed."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% on tested Bug 2 flows"},
+  "test_credentials": "Fresh signup via UI: test+<timestamp>@teologia.test / TestPass123",
+  "seed_data_creation": "One fresh Supabase auth user created during testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug 1 (Bíblia insertBefore) and Bug 2 (Aula iframe video) are both verified FIXED. Supabase aulas.url_video values are now distinct per row. Only residual finding: aula 37's YouTube ID (iWvLO4B3Tq4) plays 'Video unavailable' — cosmetic data tweak, not a code issue.",
+  "rca of the issue": {
+    "bug2": "Previously, all 21 aulas had identical url_video in Supabase, so iframe src was the same regardless of aula id. Main agent patched the table with 21 distinct YouTube URLs via Supabase Management API. Aula.jsx already had correct reactive keys (key={embed} on iframe + key={`video-${id}`} on parent) plus useEffect state reset on id change, so once data was differentiated the iframe correctly remounts and shows the right video for each aula. Verified via direct URL navigation (3 aulas) and in-app click navigation (back + click)."
+  }
+}
