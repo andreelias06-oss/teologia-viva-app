@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { fetchChapter, listBooks, getChaptersCount, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '../components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
@@ -276,8 +275,8 @@ export default function Biblia() {
     }
   };
 
-  // Tutor IA da barra flutuante: abre o drawer + dispara IA APÓS o drawer estar totalmente aberto.
-  // O snapshot dos versículos é guardado em `pendingAiVerses` e disparado pelo onOpenChange do Drawer.
+  // Tutor IA: aguarda 500ms para a seleção ESTABILIZAR antes de abrir o drawer.
+  // Depois espera mais 320ms (animação Vaul) antes de chamar a IA.
   const [pendingAiVerses, setPendingAiVerses] = useState(null);
 
   const openTutorIA = () => {
@@ -286,13 +285,14 @@ export default function Biblia() {
     if (versesNow.length === 1) setDraftObs(notes[versesNow[0].number]?.observacao || '');
     else setDraftObs('');
     setExplanation('');
-    setPendingAiVerses(versesNow);
-    setDrawerOpen(true);
+    // 1) seleção estabiliza por 500ms
+    setTimeout(() => {
+      setPendingAiVerses(versesNow);
+      setDrawerOpen(true);
+    }, 500);
   };
 
-  // Quando o drawer mudar para aberto e houver versos pendentes, dispara a IA — mas espera o
-  // próximo frame + 220ms (duração da animação do Vaul) para evitar conflito de reconciliação
-  // (clássico bug 'Failed to execute insertBefore on Node' quando a árvore muda durante a entrada).
+  // Quando o drawer estiver aberto E houver versos pendentes, chama a IA depois da animação.
   useEffect(() => {
     if (!drawerOpen) return;
     if (!pendingAiVerses || pendingAiVerses.length === 0) return;
@@ -422,9 +422,11 @@ export default function Biblia() {
                 const bg = note?.color ? COLOR_MAP[note.color].bg : 'transparent';
                 const isFav = !!note?.favorito_lista;
                 const isSelected = selectedVerses.some((s) => s.number === v.number);
+                const stableKey = `v-${bookId}-${chapter}-${v.number}`;
                 return (
                   <button
-                    key={v.number}
+                    key={stableKey}
+                    id={stableKey}
                     data-testid={`verse-${v.number}`}
                     onClick={() => toggleVerse(v)}
                     style={{ background: bg }}
@@ -501,72 +503,83 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Barra de ação flutuante — fundo sólido para garantir visibilidade em todos os dispositivos.
-          Renderizada como Portal no <body> para evitar bug do containing block do animate-fade-up
-          (transform no ancestral faz position:fixed virar position:absolute). */}
-      {selectedVerses.length > 0 && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="fixed left-1/2 -translate-x-1/2 w-[94%] max-w-md"
-              style={{
-                bottom: 'calc(env(safe-area-inset-bottom, 0px) + 100px)',
-                zIndex: 9999,
-                background: '#1A1A1A',
-                borderRadius: '16px',
-                border: '2px solid rgba(212, 175, 55, 0.55)',
-                boxShadow: '0 18px 38px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(212, 175, 55, 0.15)',
-                padding: '12px',
-              }}
-              data-testid="selection-bar"
+      {/* Barra de ferramentas — INLINE (sem Portal), fundo VERMELHO BERRANTE para teste de visibilidade.
+          position:fixed bottom:80px z-index:99999. Sem animações nem backdrop-filter. */}
+      {selectedVerses.length > 0 ? (
+        <div
+          data-testid="selection-bar"
+          style={{
+            position: 'fixed',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bottom: '90px',
+            width: 'calc(100% - 24px)',
+            maxWidth: '420px',
+            background: '#E11D48',
+            border: '3px solid #FFD700',
+            borderRadius: '14px',
+            boxShadow: '0 12px 28px rgba(0,0,0,0.7)',
+            padding: '10px',
+            zIndex: 99999,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <button
+              onClick={clearSelection}
+              data-testid="selection-clear"
+              aria-label="Limpar seleção"
+              style={{ color: '#FFFFFF', padding: '4px', background: 'transparent', border: 0 }}
             >
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={clearSelection}
-                    data-testid="selection-clear"
-                    className="text-foreground/70 hover:text-foreground shrink-0"
-                    aria-label="Limpar seleção"
-                    style={{ padding: '4px' }}
-                  >
-                    <X size={18} />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">
-                      {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
-                    </p>
-                    <p className="text-sm text-foreground truncate font-serif">{refLabel}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    data-testid="selection-highlight"
-                    onClick={() => setHighlightSheetOpen(true)}
-                    variant="outline"
-                    className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
-                  >
-                    <Highlighter size={14} className="mr-1 text-gold" /> Destacar
-                  </Button>
-                  <Button
-                    data-testid="selection-tutor-ia"
-                    onClick={openTutorIA}
-                    className="bg-gold text-navy-dark hover:bg-gold-soft h-10 text-xs font-sans font-semibold"
-                  >
-                    <Sparkles size={14} className="mr-1" /> Tutor IA
-                  </Button>
-                  <Button
-                    data-testid="selection-open-study"
-                    onClick={openStudyMenu}
-                    variant="outline"
-                    className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
-                  >
-                    <FileText size={14} className="mr-1 text-gold" /> Menu
-                  </Button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+              <X size={20} />
+            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#FFE69A', fontWeight: 600 }}>
+                {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
+              </p>
+              <p
+                style={{ fontSize: '14px', color: '#FFFFFF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'serif' }}
+              >
+                {refLabel}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+            <button
+              data-testid="selection-highlight"
+              onClick={() => setHighlightSheetOpen(true)}
+              style={{
+                background: '#FFFFFF', color: '#1A1A1A', border: 0, borderRadius: '8px',
+                height: '40px', fontSize: '12px', fontWeight: 600, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', gap: '4px',
+              }}
+            >
+              <Highlighter size={14} /> Destacar
+            </button>
+            <button
+              data-testid="selection-tutor-ia"
+              onClick={openTutorIA}
+              style={{
+                background: '#FFD700', color: '#0B1A2C', border: 0, borderRadius: '8px',
+                height: '40px', fontSize: '12px', fontWeight: 700, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', gap: '4px',
+              }}
+            >
+              <Sparkles size={14} /> Tutor IA
+            </button>
+            <button
+              data-testid="selection-open-study"
+              onClick={openStudyMenu}
+              style={{
+                background: '#FFFFFF', color: '#1A1A1A', border: 0, borderRadius: '8px',
+                height: '40px', fontSize: '12px', fontWeight: 600, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', gap: '4px',
+              }}
+            >
+              <FileText size={14} /> Menu
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Sheet rápido de cores para "Destacar" da barra flutuante */}
       <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>
