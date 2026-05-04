@@ -48,14 +48,17 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
 ## Implementado (04/mai/2026)
+- [x] **Bíblia consumida 100% do Supabase** — tabela `biblia` recriada com schema `(versao, abbrev, name, ordem, testamento, chapters jsonb)` e PK composto `(versao, abbrev)`. Populada com **3 versões completas** (NVI, ACF, AA — Almeida Atualizada), 66 livros cada, 198 linhas no total. RLS habilitado com policy de leitura pública.
+- [x] `lib/bible.js` totalmente refatorado: `listBooks(versao)`, `getChaptersCount(abbrev, versao)`, `fetchChapter(abbrev, chapter, versao)` — sem dependência de APIs externas. Cache em memória da lista de livros.
+- [x] **`Biblia.jsx` reescrito**:
+  - Header com 2 linhas: (1) Seletor de versão + botão Aa, (2) Picker de livro/capítulo + Prev/Next. Sempre visíveis acima do texto.
+  - 4 tamanhos de fonte (sm/md/lg/xl) cicláveis pelo Aa, persistidos.
+  - Versão e livro/capítulo persistidos em `localStorage`.
+  - Barra flutuante de seleção com **z-index 200**, posicionada via `bottom: calc(env(safe-area-inset-bottom) + 92px)`, com 3 botões claros: **Destacar** / **Tutor IA** / **Menu**.
+  - Botão **Tutor IA** abre o Drawer e dispara automaticamente a explicação combinada de todos os versículos selecionados (closure-safe via `versesNow`).
+  - Drawer agora em z-index 220, Sheet de cores rápidas em 210.
 - [x] **Devocional restaurado ao topo** da Início (`Inicio.jsx`): card grande aparece logo após o título da seção; StreakBadge movido para baixo do devocional.
-- [x] **Bíblia — Seletor de versões + tamanho de fonte**:
-  - Dropdown `data-testid="biblia-translation-select"` com Almeida (ARC), Bíblia Livre (BLJ), Open Nova Bíblia Viva (ONBV), Bíblia Livre p/ Todos (BLT) e NVI (em breve / placeholder com fallback automático).
-  - Botão `data-testid="biblia-font-size"` (Aa) cicla entre 4 tamanhos (sm/md/lg/xl), persistido em `localStorage`.
-  - Tradução também persistida em `localStorage` (chave `tv_biblia_translation`).
-  - `lib/bible.js` agora suporta múltiplos provedores: `bible-api.com` (Almeida) + `bible.helloao.org` (PT_BLJ/ONBV/BLT) com mapeamento USFM por livro.
-- [x] **Bíblia — Barra flutuante refeita**: 3 ações claras em grid: **Destacar** (abre Sheet com paleta de cores rápida), **Tutor IA** (abre Drawer e dispara `handleExplain` automaticamente para todos os versículos selecionados), **Menu** (abre Drawer completo).
-- [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update, evitando erros de tipo no PostgREST. Aplicado a Eixos, Cursos, Aulas, Devocionais e Eventos do painel admin.
+- [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update.
 
 ## ⚠️ Configurações PENDENTES no Supabase (a cargo do usuário)
 O teste E2E apontou 3 bloqueadores server-side:

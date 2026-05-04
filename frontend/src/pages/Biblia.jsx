@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BOOKS, fetchChapter, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
+import { fetchChapter, listBooks, getChaptersCount, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '../components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
 import { Button } from '../components/ui/button';
@@ -17,7 +17,6 @@ import VerseExplanation from '../components/VerseExplanation';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { toast } from 'sonner';
 
-// Tamanhos de fonte e persistência
 const FONT_SIZES = [
   { id: 'sm', label: 'Pequeno', cls: 'text-[16px] leading-relaxed' },
   { id: 'md', label: 'Médio', cls: 'text-[19px] leading-loose' },
@@ -26,16 +25,11 @@ const FONT_SIZES = [
 ];
 const LS_FONT = 'tv_biblia_font_size';
 const LS_TRANSLATION = 'tv_biblia_translation';
+const LS_BOOK = 'tv_biblia_book';
+const LS_CHAPTER = 'tv_biblia_chapter';
 
 export default function Biblia() {
-  const [bookId, setBookId] = useState('joao');
-  const [chapter, setChapter] = useState(3);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
-  const [chapterData, setChapterData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Tradução + tamanho de fonte (persistidos)
+  // Persistência simples
   const [translationId, setTranslationId] = useState(() => {
     try { return localStorage.getItem(LS_TRANSLATION) || DEFAULT_TRANSLATION; }
     catch { return DEFAULT_TRANSLATION; }
@@ -49,6 +43,20 @@ export default function Biblia() {
     [fontSizeId],
   );
 
+  const [books, setBooks] = useState([]);
+  const [bookId, setBookId] = useState(() => {
+    try { return localStorage.getItem(LS_BOOK) || 'jo'; } catch { return 'jo'; }
+  });
+  const [chapter, setChapter] = useState(() => {
+    try { return parseInt(localStorage.getItem(LS_CHAPTER) || '3', 10); } catch { return 3; }
+  });
+  const [chaptersCount, setChaptersCount] = useState(0);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
+  const [chapterData, setChapterData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   // Seleção múltipla
   const [selectedVerses, setSelectedVerses] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -61,23 +69,57 @@ export default function Biblia() {
   const [savingObs, setSavingObs] = useState(false);
   const { user, profile } = useAuth();
 
-  const book = useMemo(() => BOOKS.find((b) => b.id === bookId), [bookId]);
+  const book = useMemo(() => books.find((b) => b.id === bookId) || null, [books, bookId]);
 
+  // Carregar lista de livros para a versão atual
   useEffect(() => {
     let active = true;
     (async () => {
+      try {
+        const list = await listBooks(translationId);
+        if (!active) return;
+        setBooks(list);
+        // Se o livro atual não existe nessa versão, vai para o primeiro
+        if (!list.some((b) => b.id === bookId)) {
+          setBookId(list[0]?.id || 'jo');
+          setChapter(1);
+        }
+      } catch (e) {
+        toast.error('Não foi possível carregar a lista de livros');
+      }
+    })();
+    return () => { active = false; };
+  }, [translationId]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carregar capítulo + número total de capítulos do livro
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!bookId) return;
       setLoading(true);
       setSelectedVerses([]);
       try {
         const data = await fetchChapter(bookId, chapter, translationId);
         if (!active) return;
         setChapterData(data);
+        const cnt = Array.isArray(data?.verses) ? null : 0;
+        // chaptersCount: contagem total via getChaptersCount (independente do capítulo atual)
+        const totalCh = await getChaptersCount(bookId, translationId);
+        if (!active) return;
+        setChaptersCount(totalCh);
+        // notes (highlights/observações por usuário)
         if (user?.id) {
           const map = await loadChapterNotes({ userId: user.id, bookId, chapter });
           if (active) setNotes(map);
         } else {
           setNotes({});
         }
+        try {
+          localStorage.setItem(LS_BOOK, bookId);
+          localStorage.setItem(LS_CHAPTER, String(chapter));
+        } catch { /* ignore */ }
+        // suppress unused var warning
+        if (cnt) { /* no-op */ }
       } catch (e) {
         if (active) toast.error('Não foi possível carregar o capítulo');
       } finally {
@@ -88,14 +130,6 @@ export default function Biblia() {
   }, [bookId, chapter, user?.id, translationId]);
 
   const handleTranslationChange = (newId) => {
-    const t = TRANSLATIONS.find((x) => x.id === newId);
-    if (!t) return;
-    if (t.provider === 'unavailable') {
-      toast.info('NVI estará disponível em breve. Por enquanto, exibindo Almeida.');
-      setTranslationId(DEFAULT_TRANSLATION);
-      try { localStorage.setItem(LS_TRANSLATION, DEFAULT_TRANSLATION); } catch { /* ignore */ }
-      return;
-    }
     setTranslationId(newId);
     try { localStorage.setItem(LS_TRANSLATION, newId); } catch { /* ignore */ }
   };
@@ -108,7 +142,7 @@ export default function Biblia() {
     toast.success(`Texto: ${next.label}`, { duration: 1200 });
   };
 
-  // Número(s) selecionado(s) ordenado(s)
+  // Seleção
   const selectedNumbers = useMemo(
     () => selectedVerses.map((v) => v.number).sort((a, b) => a - b),
     [selectedVerses],
@@ -130,30 +164,6 @@ export default function Biblia() {
     setDrawerOpen(false);
     setExplanation('');
     setDraftObs('');
-  };
-
-  const openStudyMenu = () => {
-    if (selectedVerses.length === 0) return;
-    setExplanation('');
-    if (isSingle) {
-      setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
-    } else {
-      setDraftObs('');
-    }
-    setDrawerOpen(true);
-  };
-
-  // Abre o drawer e dispara automaticamente a explicação da IA para todos os versículos selecionados.
-  const openTutorIA = () => {
-    if (selectedVerses.length === 0) return;
-    if (isSingle) {
-      setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
-    } else {
-      setDraftObs('');
-    }
-    setDrawerOpen(true);
-    // pequeno atraso para garantir que o drawer está montado antes de chamar a IA
-    setTimeout(() => { handleExplain(); }, 80);
   };
 
   const persistOne = async (verse, patch) => {
@@ -190,7 +200,6 @@ export default function Biblia() {
   };
 
   const handleHighlight = async (color) => {
-    // Toggle: se TODOS selecionados já têm essa cor, remove. Caso contrário, aplica.
     const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.color === color);
     const newColor = allHave ? null : color;
     await applyToAll({ color: newColor }, newColor ? 'Destaque aplicado' : 'Destaque removido');
@@ -206,7 +215,7 @@ export default function Biblia() {
   };
 
   const handleSaveObs = async () => {
-    if (!isSingle) return; // observação pessoal só para versículo único
+    if (!isSingle) return;
     setSavingObs(true);
     try {
       const row = await persistOne(selectedVerses[0], { observacao: draftObs.trim() || null });
@@ -224,9 +233,9 @@ export default function Biblia() {
     }
   };
 
-  const buildPrompt = () => {
-    if (selectedVerses.length === 0) return '';
-    const ordered = [...selectedVerses].sort((a, b) => a.number - b.number);
+  const buildPrompt = (verses) => {
+    if (!verses || verses.length === 0) return '';
+    const ordered = [...verses].sort((a, b) => a.number - b.number);
     const refs = ordered.map((v) => `${v.number}`).join(', ');
     const body = ordered.map((v) => `${v.number}. "${v.text}"`).join('\n');
     return (
@@ -236,8 +245,11 @@ export default function Biblia() {
     );
   };
 
-  const handleExplain = async () => {
-    if (selectedVerses.length === 0) return;
+  // Roda a IA com a lista atual de versículos selecionados, ou com a lista passada (caso a chamada
+  // seja imediata após selecionar — para evitar problemas de closure/estado).
+  const runAIExplain = async (versesToExplain) => {
+    const verses = versesToExplain || selectedVerses;
+    if (verses.length === 0) return;
     const check = canUseAI(profile, user?.id);
     if (!check.ok) {
       toast.error(`Limite diário de ${check.limit} consultas atingido. Upgrade para Premium.`);
@@ -246,7 +258,7 @@ export default function Biblia() {
     setExplanation('');
     setExplaining(true);
     try {
-      const ans = await callCleverTask(buildPrompt());
+      const ans = await callCleverTask(buildPrompt(verses));
       incrementAICalls(user?.id);
       setExplanation(ans);
     } catch (e) {
@@ -256,25 +268,50 @@ export default function Biblia() {
     }
   };
 
+  // Tutor IA da barra flutuante: abre o drawer + dispara IA com os textos selecionados
+  const openTutorIA = () => {
+    if (selectedVerses.length === 0) return;
+    if (isSingle) setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
+    else setDraftObs('');
+    setDrawerOpen(true);
+    // captura a lista atual e passa explicitamente para evitar staleness
+    const versesNow = selectedVerses.slice();
+    setTimeout(() => { runAIExplain(versesNow); }, 80);
+  };
+
+  // Abre o drawer (Menu de estudo) sem disparar a IA automaticamente
+  const openStudyMenu = () => {
+    if (selectedVerses.length === 0) return;
+    setExplanation('');
+    if (isSingle) setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
+    else setDraftObs('');
+    setDrawerOpen(true);
+  };
+
   const goPrev = () => {
-    if (chapter > 1) setChapter(chapter - 1);
-    else {
-      const idx = BOOKS.findIndex((b) => b.id === bookId);
-      if (idx > 0) { setBookId(BOOKS[idx - 1].id); setChapter(BOOKS[idx - 1].chapters); }
+    if (chapter > 1) { setChapter(chapter - 1); return; }
+    const idx = books.findIndex((b) => b.id === bookId);
+    if (idx > 0) {
+      const prev = books[idx - 1];
+      (async () => {
+        const total = await getChaptersCount(prev.id, translationId);
+        setBookId(prev.id);
+        setChapter(total || 1);
+      })();
     }
   };
   const goNext = () => {
-    if (book && chapter < book.chapters) setChapter(chapter + 1);
-    else {
-      const idx = BOOKS.findIndex((b) => b.id === bookId);
-      if (idx < BOOKS.length - 1) { setBookId(BOOKS[idx + 1].id); setChapter(1); }
+    if (chapter < chaptersCount) { setChapter(chapter + 1); return; }
+    const idx = books.findIndex((b) => b.id === bookId);
+    if (idx < books.length - 1) {
+      setBookId(books[idx + 1].id);
+      setChapter(1);
     }
   };
 
   const refLabel = useMemo(() => {
     if (selectedNumbers.length === 0) return '';
     if (selectedNumbers.length === 1) return `${book?.nome} ${chapter}:${selectedNumbers[0]}`;
-    // Range compacto: 1,2,3,5 → "1-3, 5"
     const parts = [];
     let start = selectedNumbers[0];
     let prev = start;
@@ -288,55 +325,53 @@ export default function Biblia() {
   }, [selectedNumbers, book, chapter]);
 
   return (
-    <div className="space-y-5" data-testid="page-biblia">
+    <div className="space-y-4 pb-2" data-testid="page-biblia">
       <section>
         <p className="text-[11px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Sagrada Escritura</p>
         <h2 className="font-serif text-3xl text-foreground mt-1">Bíblia</h2>
         <div className="gold-divider w-16 mt-1" />
       </section>
 
-      <div className="flex items-center gap-2">
-        <Button data-testid="biblia-book-picker" variant="outline" onClick={() => setPickerOpen(true)}
-          className="flex-1 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50">
-          <BookOpen size={16} className="mr-2 text-gold" />
-          {book?.nome} {chapter}
-        </Button>
-        <Button onClick={goPrev} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-prev"><ChevronLeft size={18} /></Button>
-        <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-next"><ChevronRight size={18} /></Button>
-      </div>
+      {/* Controles principais: Versão + Aa em uma linha; Livro/Capítulo + Prev/Next em outra. */}
+      <div className="space-y-2" data-testid="biblia-controls">
+        <div className="flex items-center gap-2">
+          <select
+            data-testid="biblia-translation-select"
+            value={translationId}
+            onChange={(e) => handleTranslationChange(e.target.value)}
+            className="flex-1 h-10 rounded-md bg-navy-light/30 border border-gold/30 text-foreground px-3 text-sm font-sans"
+          >
+            {TRANSLATIONS.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+          <Button
+            data-testid="biblia-font-size"
+            onClick={cycleFontSize}
+            variant="outline"
+            className="border-gold/30 text-gold hover:bg-gold/10 h-10 px-3"
+            aria-label="Tamanho do texto"
+          >
+            <Type size={14} className="mr-1" />
+            <span className="text-base font-bold">A</span>
+            <span className="text-xs ml-0.5">a</span>
+          </Button>
+        </div>
 
-      {/* Tradução + tamanho de fonte */}
-      <div className="flex items-center gap-2">
-        <select
-          data-testid="biblia-translation-select"
-          value={translationId}
-          onChange={(e) => handleTranslationChange(e.target.value)}
-          className="flex-1 h-10 rounded-md bg-navy-light/30 border border-gold/30 text-foreground px-3 text-sm font-sans"
-        >
-          {TRANSLATIONS.map((t) => (
-            <option key={t.id} value={t.id} disabled={t.provider === 'unavailable'}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          data-testid="biblia-font-size"
-          onClick={cycleFontSize}
-          variant="outline"
-          className="border-gold/30 text-gold hover:bg-gold/10 h-10 px-3 font-serif"
-          aria-label="Tamanho do texto"
-        >
-          <Type size={14} className="mr-1" />
-          <span className="text-base font-bold">A</span>
-          <span className="text-xs ml-0.5">a</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            data-testid="biblia-book-picker"
+            variant="outline"
+            onClick={() => setPickerOpen(true)}
+            className="flex-1 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50"
+          >
+            <BookOpen size={16} className="mr-2 text-gold" />
+            {book?.nome || '—'} {chapter}
+          </Button>
+          <Button onClick={goPrev} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-prev"><ChevronLeft size={18} /></Button>
+          <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-next"><ChevronRight size={18} /></Button>
+        </div>
       </div>
-
-      {selectedVerses.length > 0 ? (
-        <p className="text-[11px] text-gold/70 font-sans text-center">
-          Toque em versículos para selecionar. Toque de novo para desmarcar.
-        </p>
-      ) : null}
 
       <article className="parchment rounded-2xl px-6 py-7 shadow-inner pb-24" data-testid="biblia-reader">
         {loading ? (
@@ -384,19 +419,23 @@ export default function Biblia() {
         )}
       </article>
 
-      {/* Book / Chapter pickers */}
+      {/* Sheet — escolher livro */}
       <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
         <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[80vh] overflow-y-auto z-[120]">
           <SheetHeader><SheetTitle className="font-serif text-2xl text-gold">Escolher livro</SheetTitle></SheetHeader>
           <div className="pb-10 space-y-6 mt-4">
-            {[{ label: 'Antigo Testamento', list: BOOKS.filter((b) => b.ot) }, { label: 'Novo Testamento', list: BOOKS.filter((b) => !b.ot) }].map((s) => (
+            {[{ label: 'Antigo Testamento', list: books.filter((b) => b.ot) },
+              { label: 'Novo Testamento', list: books.filter((b) => !b.ot) }].map((s) => (
               <div key={s.label}>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold mb-2">{s.label}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {s.list.map((b) => (
-                    <button key={b.id} data-testid={`pick-book-${b.id}`}
+                    <button
+                      key={b.id}
+                      data-testid={`pick-book-${b.id}`}
                       onClick={() => { setBookId(b.id); setChapter(1); setPickerOpen(false); setChapterPickerOpen(true); }}
-                      className="text-left rounded-lg border border-gold/15 bg-navy-light/30 px-3 py-2 text-sm font-serif text-foreground hover:border-gold/40">
+                      className="text-left rounded-lg border border-gold/15 bg-navy-light/30 px-3 py-2 text-sm font-serif text-foreground hover:border-gold/40"
+                    >
                       {b.nome}
                     </button>
                   ))}
@@ -407,30 +446,37 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
+      {/* Sheet — escolher capítulo */}
       <Sheet open={chapterPickerOpen} onOpenChange={setChapterPickerOpen}>
         <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto h-[60vh] overflow-y-auto z-[120]">
           <SheetHeader><SheetTitle className="font-serif text-2xl text-gold">{book?.nome} — Capítulo</SheetTitle></SheetHeader>
           <div className="pb-10 mt-4">
             <div className="grid grid-cols-6 gap-2">
-              {Array.from({ length: book?.chapters || 1 }, (_, i) => i + 1).map((n) => (
-                <button key={n} data-testid={`pick-chapter-${n}`}
+              {Array.from({ length: chaptersCount || 1 }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  data-testid={`pick-chapter-${n}`}
                   onClick={() => { setChapter(n); setChapterPickerOpen(false); }}
                   className={`rounded-lg border h-10 text-sm font-serif transition ${
                     chapter === n ? 'bg-gold text-navy-dark border-gold font-semibold' : 'border-gold/15 bg-navy-light/30 text-foreground hover:border-gold/40'
-                  }`}>{n}</button>
+                  }`}
+                >
+                  {n}
+                </button>
               ))}
             </div>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Barra de ação flutuante para seleção múltipla */}
+      {/* Barra de ação flutuante — z-index altíssimo, fixa em bottom acima da bottom-nav */}
       {selectedVerses.length > 0 ? (
         <div
-          className="fixed left-1/2 -translate-x-1/2 bottom-[88px] z-[115] w-[94%] max-w-md"
+          className="fixed left-1/2 -translate-x-1/2 z-[200] w-[94%] max-w-md"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)' }}
           data-testid="selection-bar"
         >
-          <div className="rounded-2xl border border-gold/30 bg-navy-dark/95 backdrop-blur px-3 py-3 shadow-xl space-y-2">
+          <div className="rounded-2xl border-2 border-gold/40 bg-navy-dark/98 backdrop-blur-xl px-3 py-3 shadow-2xl shadow-black/60 space-y-2">
             <div className="flex items-center gap-3">
               <button
                 onClick={clearSelection}
@@ -452,7 +498,7 @@ export default function Biblia() {
                 data-testid="selection-highlight"
                 onClick={() => setHighlightSheetOpen(true)}
                 variant="outline"
-                className="border-gold/30 text-foreground hover:bg-gold/10 h-10 text-xs font-sans"
+                className="border-gold/40 bg-navy-light/30 text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
               >
                 <Highlighter size={14} className="mr-1 text-gold" /> Destacar
               </Button>
@@ -467,7 +513,7 @@ export default function Biblia() {
                 data-testid="selection-open-study"
                 onClick={openStudyMenu}
                 variant="outline"
-                className="border-gold/30 text-foreground hover:bg-gold/10 h-10 text-xs font-sans"
+                className="border-gold/40 bg-navy-light/30 text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
               >
                 <FileText size={14} className="mr-1 text-gold" /> Menu
               </Button>
@@ -478,7 +524,7 @@ export default function Biblia() {
 
       {/* Sheet rápido de cores para "Destacar" da barra flutuante */}
       <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>
-        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[125]">
+        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[210]">
           <SheetHeader>
             <SheetTitle className="font-serif text-xl text-gold flex items-center gap-2">
               <Highlighter size={16} /> Destacar versículos
@@ -516,9 +562,9 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Study drawer — com múltiplos versículos */}
+      {/* Drawer — Menu de estudo completo */}
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerContent className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[120] max-h-[92vh]">
+        <DrawerContent className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]">
           <DrawerHeader className="border-b border-gold/10 pb-3">
             <DrawerTitle className="font-serif text-xl text-gold" data-testid="drawer-ref">
               {refLabel}
@@ -646,14 +692,14 @@ export default function Biblia() {
               </section>
             )}
 
-            {/* Explicar com IA — isolado por ErrorBoundary e key de seleção */}
+            {/* Tutor IA */}
             <section>
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
                 <Sparkles size={12} /> Tutor IA
               </p>
               <Button
                 data-testid="btn-explicar-ia"
-                onClick={handleExplain}
+                onClick={() => runAIExplain()}
                 disabled={explaining}
                 className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
               >
