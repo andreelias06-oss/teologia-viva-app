@@ -47,9 +47,15 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
-## Implementado (01/mai/2026)
-- [x] **Bug fix (P0)**: Crash React `insertBefore` ao clicar "Explicar com IA" na Bíblia — isolado bloco de explicação em novo componente `VerseExplanation.jsx`, substituído `&&` por ternários `? : null`, `key` único no container do drawer vinculado a `selectedVerse.number`. Verificado pelo testing agent (iteration_5).
-- [x] **Bug fix (P0)**: Aula mostrando mesmo vídeo ao trocar de aula — adicionado `key={embed}` no iframe, `key={`video-${id}`}` na `<section>` pai, `setAula(null)` antes do fetch em `useEffect([id, user?.id])`. Atualizado Supabase: todas as 21 aulas agora têm `url_video` distinto (via Management API / service_role). Verificado pelo testing agent (iteration_6).
+## Implementado (04/mai/2026)
+- [x] **Devocional restaurado ao topo** da Início (`Inicio.jsx`): card grande aparece logo após o título da seção; StreakBadge movido para baixo do devocional.
+- [x] **Bíblia — Seletor de versões + tamanho de fonte**:
+  - Dropdown `data-testid="biblia-translation-select"` com Almeida (ARC), Bíblia Livre (BLJ), Open Nova Bíblia Viva (ONBV), Bíblia Livre p/ Todos (BLT) e NVI (em breve / placeholder com fallback automático).
+  - Botão `data-testid="biblia-font-size"` (Aa) cicla entre 4 tamanhos (sm/md/lg/xl), persistido em `localStorage`.
+  - Tradução também persistida em `localStorage` (chave `tv_biblia_translation`).
+  - `lib/bible.js` agora suporta múltiplos provedores: `bible-api.com` (Almeida) + `bible.helloao.org` (PT_BLJ/ONBV/BLT) com mapeamento USFM por livro.
+- [x] **Bíblia — Barra flutuante refeita**: 3 ações claras em grid: **Destacar** (abre Sheet com paleta de cores rápida), **Tutor IA** (abre Drawer e dispara `handleExplain` automaticamente para todos os versículos selecionados), **Menu** (abre Drawer completo).
+- [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update, evitando erros de tipo no PostgREST. Aplicado a Eixos, Cursos, Aulas, Devocionais e Eventos do painel admin.
 
 ## ⚠️ Configurações PENDENTES no Supabase (a cargo do usuário)
 O teste E2E apontou 3 bloqueadores server-side:

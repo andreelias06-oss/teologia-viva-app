@@ -79,8 +79,6 @@ export default function Inicio() {
         <div className="gold-divider w-16" />
       </section>
 
-      <StreakBadge current={streak.current_streak} best={streak.best_streak} />
-
       {loading ? (
         <div className="space-y-3">
           <Skeleton className="h-64 w-full bg-navy-light/40" />
@@ -127,6 +125,8 @@ export default function Inicio() {
           Nenhum devocional disponível ainda.
         </div>
       )}
+
+      <StreakBadge current={streak.current_streak} best={streak.best_streak} />
 
       <section className="pt-4">
         <p className="text-[11px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-3">Continue</p>

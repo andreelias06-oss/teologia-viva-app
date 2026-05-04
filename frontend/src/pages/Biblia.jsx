@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BOOKS, fetchChapter } from '../lib/bible';
+import { BOOKS, fetchChapter, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '../components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
 import { Button } from '../components/ui/button';
@@ -7,7 +7,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Skeleton } from '../components/ui/skeleton';
 import {
   Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen,
-  Bookmark, Highlighter, Save, Trash2, X, FileText,
+  Bookmark, Highlighter, Save, Trash2, X, FileText, Type,
 } from 'lucide-react';
 import { callCleverTask } from '../lib/ai';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +17,16 @@ import VerseExplanation from '../components/VerseExplanation';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { toast } from 'sonner';
 
+// Tamanhos de fonte e persistência
+const FONT_SIZES = [
+  { id: 'sm', label: 'Pequeno', cls: 'text-[16px] leading-relaxed' },
+  { id: 'md', label: 'Médio', cls: 'text-[19px] leading-loose' },
+  { id: 'lg', label: 'Grande', cls: 'text-[22px] leading-loose' },
+  { id: 'xl', label: 'Extra grande', cls: 'text-[25px] leading-loose' },
+];
+const LS_FONT = 'tv_biblia_font_size';
+const LS_TRANSLATION = 'tv_biblia_translation';
+
 export default function Biblia() {
   const [bookId, setBookId] = useState('joao');
   const [chapter, setChapter] = useState(3);
@@ -25,13 +35,28 @@ export default function Biblia() {
   const [chapterData, setChapterData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Tradução + tamanho de fonte (persistidos)
+  const [translationId, setTranslationId] = useState(() => {
+    try { return localStorage.getItem(LS_TRANSLATION) || DEFAULT_TRANSLATION; }
+    catch { return DEFAULT_TRANSLATION; }
+  });
+  const [fontSizeId, setFontSizeId] = useState(() => {
+    try { return localStorage.getItem(LS_FONT) || 'md'; }
+    catch { return 'md'; }
+  });
+  const fontCls = useMemo(
+    () => (FONT_SIZES.find((f) => f.id === fontSizeId) || FONT_SIZES[1]).cls,
+    [fontSizeId],
+  );
+
   // Seleção múltipla
-  const [selectedVerses, setSelectedVerses] = useState([]); // [{number, text}, ...]
+  const [selectedVerses, setSelectedVerses] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
 
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
-  const [notes, setNotes] = useState({}); // verse → row
+  const [notes, setNotes] = useState({});
   const [draftObs, setDraftObs] = useState('');
   const [savingObs, setSavingObs] = useState(false);
   const { user, profile } = useAuth();
@@ -44,7 +69,7 @@ export default function Biblia() {
       setLoading(true);
       setSelectedVerses([]);
       try {
-        const data = await fetchChapter(bookId, chapter);
+        const data = await fetchChapter(bookId, chapter, translationId);
         if (!active) return;
         setChapterData(data);
         if (user?.id) {
@@ -60,7 +85,28 @@ export default function Biblia() {
       }
     })();
     return () => { active = false; };
-  }, [bookId, chapter, user?.id]);
+  }, [bookId, chapter, user?.id, translationId]);
+
+  const handleTranslationChange = (newId) => {
+    const t = TRANSLATIONS.find((x) => x.id === newId);
+    if (!t) return;
+    if (t.provider === 'unavailable') {
+      toast.info('NVI estará disponível em breve. Por enquanto, exibindo Almeida.');
+      setTranslationId(DEFAULT_TRANSLATION);
+      try { localStorage.setItem(LS_TRANSLATION, DEFAULT_TRANSLATION); } catch { /* ignore */ }
+      return;
+    }
+    setTranslationId(newId);
+    try { localStorage.setItem(LS_TRANSLATION, newId); } catch { /* ignore */ }
+  };
+
+  const cycleFontSize = () => {
+    const idx = FONT_SIZES.findIndex((f) => f.id === fontSizeId);
+    const next = FONT_SIZES[(idx + 1) % FONT_SIZES.length];
+    setFontSizeId(next.id);
+    try { localStorage.setItem(LS_FONT, next.id); } catch { /* ignore */ }
+    toast.success(`Texto: ${next.label}`, { duration: 1200 });
+  };
 
   // Número(s) selecionado(s) ordenado(s)
   const selectedNumbers = useMemo(
@@ -95,6 +141,19 @@ export default function Biblia() {
       setDraftObs('');
     }
     setDrawerOpen(true);
+  };
+
+  // Abre o drawer e dispara automaticamente a explicação da IA para todos os versículos selecionados.
+  const openTutorIA = () => {
+    if (selectedVerses.length === 0) return;
+    if (isSingle) {
+      setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
+    } else {
+      setDraftObs('');
+    }
+    setDrawerOpen(true);
+    // pequeno atraso para garantir que o drawer está montado antes de chamar a IA
+    setTimeout(() => { handleExplain(); }, 80);
   };
 
   const persistOne = async (verse, patch) => {
@@ -246,6 +305,33 @@ export default function Biblia() {
         <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-next"><ChevronRight size={18} /></Button>
       </div>
 
+      {/* Tradução + tamanho de fonte */}
+      <div className="flex items-center gap-2">
+        <select
+          data-testid="biblia-translation-select"
+          value={translationId}
+          onChange={(e) => handleTranslationChange(e.target.value)}
+          className="flex-1 h-10 rounded-md bg-navy-light/30 border border-gold/30 text-foreground px-3 text-sm font-sans"
+        >
+          {TRANSLATIONS.map((t) => (
+            <option key={t.id} value={t.id} disabled={t.provider === 'unavailable'}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          data-testid="biblia-font-size"
+          onClick={cycleFontSize}
+          variant="outline"
+          className="border-gold/30 text-gold hover:bg-gold/10 h-10 px-3 font-serif"
+          aria-label="Tamanho do texto"
+        >
+          <Type size={14} className="mr-1" />
+          <span className="text-base font-bold">A</span>
+          <span className="text-xs ml-0.5">a</span>
+        </Button>
+      </div>
+
       {selectedVerses.length > 0 ? (
         <p className="text-[11px] text-gold/70 font-sans text-center">
           Toque em versículos para selecionar. Toque de novo para desmarcar.
@@ -263,7 +349,7 @@ export default function Biblia() {
               {book?.nome} <span className="text-gold-muted">{chapter}</span>
             </h3>
             <div className="gold-divider w-12 mx-auto mb-5" />
-            <div className="font-serif text-[19px] leading-loose text-sepia-text">
+            <div className={`font-serif text-sepia-text ${fontCls}`}>
               {chapterData.verses.map((v) => {
                 const note = notes[v.number];
                 const bg = note?.color ? COLOR_MAP[note.color].bg : 'transparent';
@@ -341,34 +427,94 @@ export default function Biblia() {
       {/* Barra de ação flutuante para seleção múltipla */}
       {selectedVerses.length > 0 ? (
         <div
-          className="fixed left-1/2 -translate-x-1/2 bottom-[88px] z-[115] w-[92%] max-w-md"
+          className="fixed left-1/2 -translate-x-1/2 bottom-[88px] z-[115] w-[94%] max-w-md"
           data-testid="selection-bar"
         >
-          <div className="rounded-2xl border border-gold/30 bg-navy-dark/95 backdrop-blur px-4 py-3 shadow-xl flex items-center gap-3">
-            <button
-              onClick={clearSelection}
-              data-testid="selection-clear"
-              className="text-foreground/70 hover:text-foreground shrink-0"
-              aria-label="Limpar seleção"
-            >
-              <X size={18} />
-            </button>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">
-                {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
-              </p>
-              <p className="text-sm text-foreground truncate font-serif">{refLabel}</p>
+          <div className="rounded-2xl border border-gold/30 bg-navy-dark/95 backdrop-blur px-3 py-3 shadow-xl space-y-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={clearSelection}
+                data-testid="selection-clear"
+                className="text-foreground/70 hover:text-foreground shrink-0"
+                aria-label="Limpar seleção"
+              >
+                <X size={18} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">
+                  {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
+                </p>
+                <p className="text-sm text-foreground truncate font-serif">{refLabel}</p>
+              </div>
             </div>
-            <Button
-              data-testid="selection-open-study"
-              onClick={openStudyMenu}
-              className="bg-gold text-navy-dark hover:bg-gold-soft h-10 shrink-0"
-            >
-              <FileText size={14} className="mr-1" /> Menu de estudo
-            </Button>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                data-testid="selection-highlight"
+                onClick={() => setHighlightSheetOpen(true)}
+                variant="outline"
+                className="border-gold/30 text-foreground hover:bg-gold/10 h-10 text-xs font-sans"
+              >
+                <Highlighter size={14} className="mr-1 text-gold" /> Destacar
+              </Button>
+              <Button
+                data-testid="selection-tutor-ia"
+                onClick={openTutorIA}
+                className="bg-gold text-navy-dark hover:bg-gold-soft h-10 text-xs font-sans font-semibold"
+              >
+                <Sparkles size={14} className="mr-1" /> Tutor IA
+              </Button>
+              <Button
+                data-testid="selection-open-study"
+                onClick={openStudyMenu}
+                variant="outline"
+                className="border-gold/30 text-foreground hover:bg-gold/10 h-10 text-xs font-sans"
+              >
+                <FileText size={14} className="mr-1 text-gold" /> Menu
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
+
+      {/* Sheet rápido de cores para "Destacar" da barra flutuante */}
+      <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>
+        <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[125]">
+          <SheetHeader>
+            <SheetTitle className="font-serif text-xl text-gold flex items-center gap-2">
+              <Highlighter size={16} /> Destacar versículos
+            </SheetTitle>
+          </SheetHeader>
+          <div className="px-2 py-4 space-y-3">
+            <p className="text-xs text-foreground/70 font-sans">
+              Aplica a cor escolhida em {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''} selecionado{selectedVerses.length > 1 ? 's' : ''}.
+            </p>
+            <div className="flex gap-2">
+              {Object.entries(COLOR_MAP).map(([key, c]) => {
+                const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.color === key);
+                return (
+                  <button
+                    key={key}
+                    data-testid={`quick-highlight-${key}`}
+                    onClick={async () => {
+                      await handleHighlight(key);
+                      setHighlightSheetOpen(false);
+                    }}
+                    className={`flex-1 h-12 rounded-lg border-2 transition active:scale-95 ${
+                      allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
+                    }`}
+                    style={{
+                      background: c.bg,
+                      borderColor: allHave ? c.ring : 'transparent',
+                      ...(allHave && { '--tw-ring-color': c.ring }),
+                    }}
+                    aria-label={c.label}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Study drawer — com múltiplos versículos */}
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
