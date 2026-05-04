@@ -59,10 +59,15 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
   - Drawer em z-index 220, Sheet de cores em 210, todos via Radix Portal.
   - `console.log` no `toggleVerse` para debug do estado de seleção.
   - **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
-  - **Bíblia — Anti-crash do Tutor IA na barra flutuante (04/mai/2026)**:
-  - `<DrawerContent>` agora tem `key={drawer-${selectionKey}}` para forçar remount em cada nova seleção (evita reuso de DOM por Vaul).
-  - `openTutorIA` apenas guarda os versos em `pendingAiVerses` e abre o drawer; um `useEffect([drawerOpen, pendingAiVerses])` aguarda 320ms (animação Vaul ≈ 220ms) **após** o drawer estar aberto antes de chamar `runAIExplain`. Elimina o conflito de reconciliação 'Failed to execute insertBefore'.
-  - `ErrorBoundary` agora exibe botão **"Tentar novamente"** que reseta o estado e re-executa via `onRetry`.
+  - **Bíblia — DESACOPLAMENTO TOTAL Drawer × Lista (04/mai/2026)**:
+    - Estado `drawerVerses` independente de `selectedVerses` — o drawer trabalha sobre snapshot próprio.
+    - Sequência de abertura: snapshot → `setSelectedVerses([])` (fecha a barra IMEDIATAMENTE) → `window.setTimeout(100ms)` → `setDrawerVerses + setDrawerOpen(true)` → `useEffect` aguarda 320ms (Vaul anima) → `runAIExplain(verses)`.
+    - `useRef` (`aiVersesRef`) guarda os versículos para a IA fora do ciclo de re-render.
+    - Lista da Bíblia fica **inerte** (`pointer-events: none`, opacity 0.6, `aria-hidden`) enquanto o drawer está aberto.
+    - Removidas `transition`/`hover` dos botões de versículos.
+    - `key={drawer-${drawerKey}}` no `<DrawerContent>` força remount limpo a cada nova seleção.
+    - Validado: 2 ciclos consecutivos de seleção → Tutor IA → IA renderizando, **zero** erros de console.
+    - `ErrorBoundary` envolvendo a explicação com botão "Tentar novamente".
 - [x] **Devocional restaurado ao topo** da Início (`Inicio.jsx`): card grande aparece logo após o título da seção; StreakBadge movido para baixo do devocional.
 - [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update.
 

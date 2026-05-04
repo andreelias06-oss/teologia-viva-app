@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchChapter, listBooks, getChaptersCount, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '../components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
@@ -62,9 +62,17 @@ export default function Biblia() {
   const [chapterData, setChapterData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Seleção múltipla
+  // Seleção múltipla (lista da Bíblia)
   const [selectedVerses, setSelectedVerses] = useState([]);
+
+  // ESTADO ISOLADO DO DRAWER — desacoplado da seleção da Bíblia.
+  // O drawer mantém sua própria cópia dos versículos para evitar conflitos de reconciliação
+  // quando a lista da Bíblia muda (highlight/seleção/etc) enquanto o drawer está aberto.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerVerses, setDrawerVerses] = useState([]);
+  const aiVersesRef = useRef(null);     // versículos pendentes para a IA
+  const [aiNonce, setAiNonce] = useState(0);  // bump quando queremos disparar a IA
+
   const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
 
   const [explaining, setExplaining] = useState(false);
@@ -147,14 +155,20 @@ export default function Biblia() {
     toast.success(`Texto: ${next.label}`, { duration: 1200 });
   };
 
-  // Seleção
+  // Seleção (vista pela barra) — Bíblia
   const selectedNumbers = useMemo(
     () => selectedVerses.map((v) => v.number).sort((a, b) => a - b),
     [selectedVerses],
   );
-  const selectionKey = selectedNumbers.join('-') || 'none';
-  const isSingle = selectedVerses.length === 1;
-  const singleNote = isSingle ? notes[selectedVerses[0].number] : null;
+
+  // Drawer: trabalha com `drawerVerses` (snapshot independente).
+  const drawerNumbers = useMemo(
+    () => drawerVerses.map((v) => v.number).sort((a, b) => a - b),
+    [drawerVerses],
+  );
+  const drawerKey = drawerNumbers.join('-') || 'none';
+  const isSingleDrawer = drawerVerses.length === 1;
+  const singleNote = isSingleDrawer ? notes[drawerVerses[0].number] : null;
 
   const toggleVerse = (v) => {
     setSelectedVerses((prev) => {
@@ -189,11 +203,13 @@ export default function Biblia() {
 
   const applyToAll = async (patch, successMsg) => {
     if (!user?.id) return;
+    // Dentro do drawer: opera sobre drawerVerses; senão (caso barra ainda esteja viva): selectedVerses
+    const verses = drawerOpen ? drawerVerses : selectedVerses;
     try {
-      const results = await Promise.all(selectedVerses.map((v) => persistOne(v, patch)));
+      const results = await Promise.all(verses.map((v) => persistOne(v, patch)));
       setNotes((m) => {
         const next = { ...m };
-        selectedVerses.forEach((v, i) => {
+        verses.forEach((v, i) => {
           const row = results[i];
           if (row) next[v.number] = row;
           else delete next[v.number];
@@ -207,13 +223,15 @@ export default function Biblia() {
   };
 
   const handleHighlight = async (color) => {
-    const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.color === color);
+    const verses = drawerOpen ? drawerVerses : selectedVerses;
+    const allHave = verses.length > 0 && verses.every((v) => notes[v.number]?.color === color);
     const newColor = allHave ? null : color;
     await applyToAll({ color: newColor }, newColor ? 'Destaque aplicado' : 'Destaque removido');
   };
 
   const handleFavorito = async (lista) => {
-    const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.favorito_lista === lista);
+    const verses = drawerOpen ? drawerVerses : selectedVerses;
+    const allHave = verses.length > 0 && verses.every((v) => notes[v.number]?.favorito_lista === lista);
     const newLista = allHave ? null : lista;
     await applyToAll(
       { favorito_lista: newLista },
@@ -222,14 +240,15 @@ export default function Biblia() {
   };
 
   const handleSaveObs = async () => {
-    if (!isSingle) return;
+    if (!isSingleDrawer) return;
+    const verse = drawerVerses[0];
     setSavingObs(true);
     try {
-      const row = await persistOne(selectedVerses[0], { observacao: draftObs.trim() || null });
+      const row = await persistOne(verse, { observacao: draftObs.trim() || null });
       setNotes((m) => {
         const next = { ...m };
-        if (row) next[selectedVerses[0].number] = row;
-        else delete next[selectedVerses[0].number];
+        if (row) next[verse.number] = row;
+        else delete next[verse.number];
         return next;
       });
       toast.success('Observação salva');
@@ -275,45 +294,65 @@ export default function Biblia() {
     }
   };
 
-  // Tutor IA: aguarda 500ms para a seleção ESTABILIZAR antes de abrir o drawer.
-  // Depois espera mais 320ms (animação Vaul) antes de chamar a IA.
-  const [pendingAiVerses, setPendingAiVerses] = useState(null);
-
+  // === DESACOPLAMENTO TOTAL ===
+  // Passo 1: snapshot dos versículos selecionados em variável local + ref.
+  // Passo 2: limpa selectedVerses (fecha a barra) — encerra a renderização da seleção na lista.
+  // Passo 3: setTimeout(100ms) → React respira → setDrawerVerses + setDrawerOpen(true).
+  // Passo 4: useEffect dispara IA quando drawer já está aberto (delay 320ms para Vaul terminar).
   const openTutorIA = () => {
     if (selectedVerses.length === 0) return;
-    const versesNow = selectedVerses.slice();
-    if (versesNow.length === 1) setDraftObs(notes[versesNow[0].number]?.observacao || '');
-    else setDraftObs('');
+    const snapshot = selectedVerses.slice();
+    aiVersesRef.current = snapshot;
+    setSelectedVerses([]);  // fecha a barra IMEDIATAMENTE
     setExplanation('');
-    // 1) seleção estabiliza por 500ms
-    setTimeout(() => {
-      setPendingAiVerses(versesNow);
+    setDraftObs('');
+    window.setTimeout(() => {
+      setDrawerVerses(snapshot);
+      if (snapshot.length === 1) setDraftObs(notes[snapshot[0].number]?.observacao || '');
       setDrawerOpen(true);
-    }, 500);
+      setAiNonce((n) => n + 1);  // dispara o useEffect da IA
+    }, 100);
   };
 
-  // Quando o drawer estiver aberto E houver versos pendentes, chama a IA depois da animação.
-  useEffect(() => {
-    if (!drawerOpen) return;
-    if (!pendingAiVerses || pendingAiVerses.length === 0) return;
-    let cancelled = false;
-    const t = setTimeout(() => {
-      if (cancelled) return;
-      const versesToRun = pendingAiVerses;
-      setPendingAiVerses(null);
-      runAIExplain(versesToRun);
-    }, 320);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [drawerOpen, pendingAiVerses]);  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Abre o drawer (Menu de estudo) sem disparar a IA automaticamente
   const openStudyMenu = () => {
     if (selectedVerses.length === 0) return;
+    const snapshot = selectedVerses.slice();
+    setSelectedVerses([]);  // fecha a barra IMEDIATAMENTE
     setExplanation('');
-    if (isSingle) setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
-    else setDraftObs('');
-    setDrawerOpen(true);
+    setDraftObs('');
+    window.setTimeout(() => {
+      setDrawerVerses(snapshot);
+      if (snapshot.length === 1) setDraftObs(notes[snapshot[0].number]?.observacao || '');
+      setDrawerOpen(true);
+    }, 100);
   };
+
+  // useEffect: dispara a IA quando o drawer já está aberto + nonce mudou (após Vaul animar 220ms).
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!aiVersesRef.current || aiVersesRef.current.length === 0) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      if (cancelled) return;
+      const verses = aiVersesRef.current;
+      aiVersesRef.current = null;
+      runAIExplain(verses);
+    }, 320);
+    return () => { cancelled = true; window.clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiNonce, drawerOpen]);
+
+  // Limpa drawerVerses quando o drawer fecha — evita resíduos no próximo open.
+  useEffect(() => {
+    if (drawerOpen) return;
+    const t = window.setTimeout(() => {
+      setDrawerVerses([]);
+      setExplanation('');
+      setDraftObs('');
+      aiVersesRef.current = null;
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [drawerOpen]);
 
   const goPrev = () => {
     if (chapter > 1) { setChapter(chapter - 1); return; }
@@ -337,19 +376,20 @@ export default function Biblia() {
   };
 
   const refLabel = useMemo(() => {
-    if (selectedNumbers.length === 0) return '';
-    if (selectedNumbers.length === 1) return `${book?.nome} ${chapter}:${selectedNumbers[0]}`;
+    const nums = drawerOpen ? drawerNumbers : selectedNumbers;
+    if (nums.length === 0) return '';
+    if (nums.length === 1) return `${book?.nome} ${chapter}:${nums[0]}`;
     const parts = [];
-    let start = selectedNumbers[0];
+    let start = nums[0];
     let prev = start;
-    for (let i = 1; i <= selectedNumbers.length; i++) {
-      const n = selectedNumbers[i];
+    for (let i = 1; i <= nums.length; i++) {
+      const n = nums[i];
       if (n === prev + 1) { prev = n; continue; }
       parts.push(start === prev ? `${start}` : `${start}-${prev}`);
       start = n; prev = n;
     }
     return `${book?.nome} ${chapter}:${parts.join(', ')}`;
-  }, [selectedNumbers, book, chapter]);
+  }, [selectedNumbers, drawerNumbers, drawerOpen, book, chapter]);
 
   return (
     <div className="space-y-4 pb-2" data-testid="page-biblia">
@@ -405,7 +445,14 @@ export default function Biblia() {
         </div>
       </div>
 
-      <article className="parchment rounded-2xl px-6 py-7 shadow-inner pb-24" data-testid="biblia-reader">
+      <article
+        className="parchment rounded-2xl px-6 py-7 shadow-inner pb-24"
+        data-testid="biblia-reader"
+        // Bíblia INERTE enquanto o drawer estiver aberto — evita novas interações que poderiam
+        // disparar mutações de DOM e causar 'Failed to execute insertBefore'.
+        style={drawerOpen ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
+        aria-hidden={drawerOpen ? 'true' : undefined}
+      >
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" />
@@ -430,7 +477,7 @@ export default function Biblia() {
                     data-testid={`verse-${v.number}`}
                     onClick={() => toggleVerse(v)}
                     style={{ background: bg }}
-                    className={`text-left inline rounded px-0.5 transition hover:bg-gold/15 active:bg-gold/25 ${
+                    className={`text-left inline rounded px-0.5 ${
                       isSelected ? 'ring-2 ring-gold ring-offset-1 ring-offset-transparent bg-gold/25' : ''
                     }`}
                     title={note?.observacao ? 'Com observação' : undefined}
@@ -503,8 +550,8 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Barra de ferramentas — INLINE (sem Portal), fundo VERMELHO BERRANTE para teste de visibilidade.
-          position:fixed bottom:80px z-index:99999. Sem animações nem backdrop-filter. */}
+      {/* Barra de ferramentas — INLINE (sem Portal). Fundo navy sólido + borda dourada.
+          position:fixed bottom:90px z-index:99999. Sem animações. */}
       {selectedVerses.length > 0 ? (
         <div
           data-testid="selection-bar"
@@ -515,10 +562,10 @@ export default function Biblia() {
             bottom: '90px',
             width: 'calc(100% - 24px)',
             maxWidth: '420px',
-            background: '#E11D48',
-            border: '3px solid #FFD700',
+            background: '#0B1A2C',
+            border: '2px solid rgba(212, 175, 55, 0.55)',
             borderRadius: '14px',
-            boxShadow: '0 12px 28px rgba(0,0,0,0.7)',
+            boxShadow: '0 14px 32px rgba(0,0,0,0.7)',
             padding: '10px',
             zIndex: 99999,
           }}
@@ -528,16 +575,16 @@ export default function Biblia() {
               onClick={clearSelection}
               data-testid="selection-clear"
               aria-label="Limpar seleção"
-              style={{ color: '#FFFFFF', padding: '4px', background: 'transparent', border: 0 }}
+              style={{ color: '#E5E7EB', padding: '4px', background: 'transparent', border: 0 }}
             >
               <X size={20} />
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#FFE69A', fontWeight: 600 }}>
+              <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#D4AF37', fontWeight: 600 }}>
                 {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
               </p>
               <p
-                style={{ fontSize: '14px', color: '#FFFFFF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'serif' }}
+                style={{ fontSize: '14px', color: '#F5F1E6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'serif' }}
               >
                 {refLabel}
               </p>
@@ -548,18 +595,18 @@ export default function Biblia() {
               data-testid="selection-highlight"
               onClick={() => setHighlightSheetOpen(true)}
               style={{
-                background: '#FFFFFF', color: '#1A1A1A', border: 0, borderRadius: '8px',
-                height: '40px', fontSize: '12px', fontWeight: 600, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', gap: '4px',
+                background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+                borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
               }}
             >
-              <Highlighter size={14} /> Destacar
+              <Highlighter size={14} color="#D4AF37" /> Destacar
             </button>
             <button
               data-testid="selection-tutor-ia"
               onClick={openTutorIA}
               style={{
-                background: '#FFD700', color: '#0B1A2C', border: 0, borderRadius: '8px',
+                background: '#D4AF37', color: '#0B1A2C', border: 0, borderRadius: '8px',
                 height: '40px', fontSize: '12px', fontWeight: 700, display: 'flex',
                 alignItems: 'center', justifyContent: 'center', gap: '4px',
               }}
@@ -570,18 +617,18 @@ export default function Biblia() {
               data-testid="selection-open-study"
               onClick={openStudyMenu}
               style={{
-                background: '#FFFFFF', color: '#1A1A1A', border: 0, borderRadius: '8px',
-                height: '40px', fontSize: '12px', fontWeight: 600, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', gap: '4px',
+                background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+                borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
               }}
             >
-              <FileText size={14} /> Menu
+              <FileText size={14} color="#D4AF37" /> Menu
             </button>
           </div>
         </div>
       ) : null}
 
-      {/* Sheet rápido de cores para "Destacar" da barra flutuante */}
+      {/* Sheet rápido de cores para "Destacar" — usa drawerVerses se drawer aberto, senão selectedVerses */}
       <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>
         <SheetContent side="bottom" className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[210]">
           <SheetHeader>
@@ -590,42 +637,48 @@ export default function Biblia() {
             </SheetTitle>
           </SheetHeader>
           <div className="px-2 py-4 space-y-3">
-            <p className="text-xs text-foreground/70 font-sans">
-              Aplica a cor escolhida em {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''} selecionado{selectedVerses.length > 1 ? 's' : ''}.
-            </p>
-            <div className="flex gap-2">
-              {Object.entries(COLOR_MAP).map(([key, c]) => {
-                const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.color === key);
-                return (
-                  <button
-                    key={key}
-                    data-testid={`quick-highlight-${key}`}
-                    onClick={async () => {
-                      await handleHighlight(key);
-                      setHighlightSheetOpen(false);
-                    }}
-                    className={`flex-1 h-12 rounded-lg border-2 transition active:scale-95 ${
-                      allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
-                    }`}
-                    style={{
-                      background: c.bg,
-                      borderColor: allHave ? c.ring : 'transparent',
-                      ...(allHave && { '--tw-ring-color': c.ring }),
-                    }}
-                    aria-label={c.label}
-                  />
-                );
-              })}
-            </div>
+            {(() => {
+              const verses = drawerOpen ? drawerVerses : selectedVerses;
+              return (
+                <>
+                  <p className="text-xs text-foreground/70 font-sans">
+                    Aplica a cor escolhida em {verses.length} versículo{verses.length > 1 ? 's' : ''} selecionado{verses.length > 1 ? 's' : ''}.
+                  </p>
+                  <div className="flex gap-2">
+                    {Object.entries(COLOR_MAP).map(([key, c]) => {
+                      const allHave = verses.length > 0 && verses.every((v) => notes[v.number]?.color === key);
+                      return (
+                        <button
+                          key={key}
+                          data-testid={`quick-highlight-${key}`}
+                          onClick={async () => {
+                            await handleHighlight(key);
+                            setHighlightSheetOpen(false);
+                          }}
+                          className={`flex-1 h-12 rounded-lg border-2 active:scale-95 ${
+                            allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
+                          }`}
+                          style={{
+                            background: c.bg,
+                            borderColor: allHave ? c.ring : 'transparent',
+                            ...(allHave && { '--tw-ring-color': c.ring }),
+                          }}
+                          aria-label={c.label}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Drawer — Menu de estudo completo. `key` força remount limpo a cada nova seleção,
-          evitando crashes de reconciliação do Vaul ('Failed to execute insertBefore'). */}
+      {/* Drawer — Menu de estudo. Usa estado ISOLADO `drawerVerses` desacoplado da seleção da Bíblia. */}
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DrawerContent
-          key={`drawer-${selectionKey}`}
+          key={`drawer-${drawerKey}`}
           className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]"
         >
           <DrawerHeader className="border-b border-gold/10 pb-3">
@@ -633,11 +686,11 @@ export default function Biblia() {
               {refLabel}
             </DrawerTitle>
             <DrawerDescription className="text-foreground/85 font-serif italic text-base leading-relaxed pt-2 max-h-32 overflow-y-auto">
-              {selectedVerses
+              {drawerVerses
                 .slice()
                 .sort((a, b) => a.number - b.number)
                 .map((v) => (
-                  <span key={v.number} className="block">
+                  <span key={`dv-${v.number}`} className="block">
                     <span className="text-gold-muted text-xs mr-1">{v.number}</span>
                     {v.text}
                   </span>
@@ -646,24 +699,24 @@ export default function Biblia() {
           </DrawerHeader>
 
           <div
-            key={`study-${selectionKey}`}
+            key={`study-${drawerKey}`}
             className="overflow-y-auto px-5 py-4 space-y-5"
             style={{ paddingBottom: '120px' }}
           >
             {/* Destacar */}
             <section>
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
-                <Highlighter size={12} /> Destacar {selectedVerses.length > 1 ? `(${selectedVerses.length})` : ''}
+                <Highlighter size={12} /> Destacar {drawerVerses.length > 1 ? `(${drawerVerses.length})` : ''}
               </p>
               <div className="flex gap-2">
                 {Object.entries(COLOR_MAP).map(([key, c]) => {
-                  const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.color === key);
+                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.color === key);
                   return (
                     <button
                       key={key}
                       data-testid={`highlight-${key}`}
                       onClick={() => handleHighlight(key)}
-                      className={`flex-1 h-10 rounded-lg border-2 transition active:scale-95 ${
+                      className={`flex-1 h-10 rounded-lg border-2 active:scale-95 ${
                         allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
                       }`}
                       style={{
@@ -685,13 +738,13 @@ export default function Biblia() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[{ key: 'promessas', label: 'Promessas' }, { key: 'estudos', label: 'Estudos' }].map((f) => {
-                  const allHave = selectedVerses.length > 0 && selectedVerses.every((v) => notes[v.number]?.favorito_lista === f.key);
+                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.favorito_lista === f.key);
                   return (
                     <button
                       key={f.key}
                       data-testid={`favorito-${f.key}`}
                       onClick={() => handleFavorito(f.key)}
-                      className={`h-10 rounded-lg border text-sm font-sans tracking-wide transition active:scale-[0.98] ${
+                      className={`h-10 rounded-lg border text-sm font-sans tracking-wide active:scale-[0.98] ${
                         allHave ? 'bg-gold text-navy-dark border-gold font-semibold' : 'border-gold/30 text-foreground/85 hover:border-gold/60'
                       }`}
                     >
@@ -703,7 +756,7 @@ export default function Biblia() {
             </section>
 
             {/* Observação — somente com seleção única */}
-            {isSingle ? (
+            {isSingleDrawer ? (
               <section>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Observação pessoal</p>
                 <Textarea
@@ -729,10 +782,10 @@ export default function Biblia() {
                       data-testid="btn-excluir-obs"
                       onClick={async () => {
                         setDraftObs('');
-                        await persistOne(selectedVerses[0], { observacao: null });
+                        await persistOne(drawerVerses[0], { observacao: null });
                         setNotes((m) => {
                           const next = { ...m };
-                          const n = selectedVerses[0].number;
+                          const n = drawerVerses[0].number;
                           if (next[n]) next[n] = { ...next[n], observacao: null };
                           return next;
                         });
@@ -762,7 +815,7 @@ export default function Biblia() {
               </p>
               <Button
                 data-testid="btn-explicar-ia"
-                onClick={() => runAIExplain()}
+                onClick={() => runAIExplain(drawerVerses)}
                 disabled={explaining}
                 className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
               >
@@ -773,10 +826,10 @@ export default function Biblia() {
                 )}
               </Button>
               <ErrorBoundary
-                resetKey={selectionKey}
-                onRetry={() => runAIExplain(selectedVerses.slice())}
+                resetKey={drawerKey}
+                onRetry={() => runAIExplain(drawerVerses)}
               >
-                <div key={`explanation-${selectionKey}`} className="mt-3">
+                <div key={`explanation-${drawerKey}`} className="mt-3">
                   <VerseExplanation loading={explaining} text={explanation} />
                 </div>
               </ErrorBoundary>
