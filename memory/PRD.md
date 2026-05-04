@@ -59,7 +59,19 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
   - Drawer em z-index 220, Sheet de cores em 210, todos via Radix Portal.
   - `console.log` no `toggleVerse` para debug do estado de seleção.
   - **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
+  - **Progresso de aulas migrado para Supabase + Realtime (04/mai/2026)**:
   - **Web Push Notifications do Devocional Diário (04/mai/2026)**:
+    - Tabela `progresso_aulas` `(user_id, aula_id, curso_id, completed_at)` com RLS por usuário e adicionada à publication `supabase_realtime`.
+    - `lib/progresso.js` com `listProgress`, `markComplete`, `unmarkComplete`, `migrateLocalProgressToSupabase`, `subscribeProgress`.
+    - `AuthContext` chama `migrateLocalProgressToSupabase` automaticamente no login (idempotente, marca flag `tv_progress_migrated_v1_<userId>` no localStorage).
+    - `Aula.jsx`, `Curso.jsx` e `Perfil.jsx` agora leem do Supabase. `markComplete` upserta em vez de localStorage.
+    - **Realtime sync**: `subscribeProgress` em `Aula.jsx` e `Curso.jsx` — marca aula no notebook e o S24 atualiza instantaneamente sem refresh.
+  - **Lembrete de Meditação 18:00 (04/mai/2026)** — segunda push opcional:
+    - Coluna `profiles.notif_meditacao` (bool default false).
+    - Edge Function `send-devotional-push` parametrizada com `kind: 'devocional'|'meditacao'` (mesma função, dois crons).
+    - Mensagem meditação: **"🌙 Hora da meditação — Que tal retomar [título] antes de descansar?"**
+    - pg_cron `send-meditation-reminder-daily` em `0 21 * * *` (= 18:00 BRT).
+    - Switch separado no Perfil (`data-testid="switch-notif-meditacao"`) — opcional, totalmente independente do switch de devocional. Reusa a mesma push subscription.
     - **VAPID keys** geradas localmente (P-256). Public key em `frontend/.env` (`REACT_APP_VAPID_PUBLIC_KEY`); Private + Subject (`mailto:contato@teologiaviva.app`) nas Edge Function secrets do Supabase.
     - **Service Worker** `/public/sw.js` — handlers `push` (showNotification) e `notificationclick` (foco/abrir app).
     - **Tabela `push_subscriptions`** (user_id, endpoint, p256dh, auth, user_agent) com RLS — usuário gerencia suas próprias inscrições; service_role lê todas.

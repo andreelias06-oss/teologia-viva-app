@@ -37,8 +37,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { date, dryRun } = await safeJson(req);
+    const { date, dryRun, kind } = await safeJson(req);
     const sb = createClient(SUPA_URL, SUPA_SR);
+    const isMeditacao = kind === 'meditacao';
 
     // 1) Devocional do dia (ou mais recente como fallback).
     const today = date || new Date().toISOString().slice(0, 10);
@@ -60,31 +61,38 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: 'Nenhum devocional disponível' }, 200);
     }
 
-    const title = '☕ Seu devocional de hoje já está disponível!';
-    const body = devo.titulo
-      ? `${devo.titulo} — Vamos meditar na Palavra?`
-      : 'Vamos meditar na Palavra?';
+    // 2) Mensagem por tipo
+    const title = isMeditacao
+      ? '🌙 Hora da meditação'
+      : '☕ Seu devocional de hoje já está disponível!';
+    const body = isMeditacao
+      ? (devo.titulo
+          ? `Que tal retomar "${devo.titulo}" antes de descansar?`
+          : 'Reserve um momento para meditar na Palavra.')
+      : (devo.titulo
+          ? `${devo.titulo} — Vamos meditar na Palavra?`
+          : 'Vamos meditar na Palavra?');
 
-    // 2) Buscar inscrições de usuários com notif_devocional=true.
+    // 3) Buscar inscrições do tipo correto
+    const flagCol = isMeditacao ? 'notif_meditacao' : 'notif_devocional';
     const { data: subs } = await sb
       .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth, user_id, profiles!inner(notif_devocional)')
-      .eq('profiles.notif_devocional', true);
+      .select(`id, endpoint, p256dh, auth, user_id, profiles!inner(${flagCol})`)
+      .eq(`profiles.${flagCol}`, true);
 
     if (!subs || subs.length === 0) {
-      return json({ ok: true, sent: 0, total: 0, devocional: devo.titulo });
+      return json({ ok: true, sent: 0, total: 0, kind: kind || 'devocional', devocional: devo.titulo });
     }
 
     if (dryRun) {
-      return json({ ok: true, dryRun: true, total: subs.length, devocional: devo.titulo, title, body });
+      return json({ ok: true, dryRun: true, total: subs.length, kind: kind || 'devocional', title, body });
     }
 
-    // 3) Enviar para todos.
     const payload = JSON.stringify({
       title,
       body,
       url: '/',
-      tag: `devocional-${today}`,
+      tag: isMeditacao ? `meditacao-${today}` : `devocional-${today}`,
       icon: '/icon-192.png',
     });
     const expiredIds: number[] = [];

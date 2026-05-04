@@ -6,35 +6,63 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Progress } from '../components/ui/progress';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessLesson } from '../lib/plan';
+import { listProgress, subscribeProgress } from '../lib/progresso';
 
 export default function Curso() {
   const { id } = useParams();
   const [curso, setCurso] = useState(null);
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [progresso, setProgresso] = useState({});
+  const [progresso, setProgresso] = useState({});  // { aulaId: true }
   const navigate = useNavigate();
   const { profile, user } = useAuth();
 
   useEffect(() => {
+    let active = true;
     (async () => {
       setLoading(true);
       const [{ data: cursoData }, { data: aulasData }] = await Promise.all([
         supabase.from('cursos').select('*').eq('id', id).maybeSingle(),
         supabase.from('aulas').select('*').eq('curso_id', id).order('ordem', { ascending: true }),
       ]);
+      if (!active) return;
       setCurso(cursoData);
       setAulas(aulasData || []);
 
-      // Local progress
-      try {
-        const raw = localStorage.getItem(`tv_progress_${user?.id}_${id}`);
-        if (raw) setProgresso(JSON.parse(raw));
-      } catch { /* ignore */ }
+      if (user?.id) {
+        try {
+          const rows = await listProgress({ userId: user.id, cursoId: parseInt(id, 10) });
+          if (!active) return;
+          const map = {};
+          rows.forEach((r) => { map[r.aula_id] = true; });
+          setProgresso(map);
+        } catch { /* ignore */ }
+      }
 
       setLoading(false);
     })();
+    return () => { active = false; };
   }, [id, user?.id]);
+
+  // Realtime: outro dispositivo marca/desmarca uma aula deste curso → atualiza UI.
+  useEffect(() => {
+    if (!user?.id) return;
+    const cursoIdNum = parseInt(id, 10);
+    const unsub = subscribeProgress(user.id, (payload) => {
+      const row = payload.new || payload.old;
+      const rowCurso = row?.curso_id;
+      if (rowCurso != null && Number(rowCurso) !== cursoIdNum) return;
+      const aulaId = row?.aula_id;
+      if (!aulaId) return;
+      setProgresso((m) => {
+        const next = { ...m };
+        if (payload.eventType === 'DELETE') delete next[aulaId];
+        else next[aulaId] = true;
+        return next;
+      });
+    });
+    return unsub;
+  }, [user?.id, id]);
 
   const total = aulas.length || 1;
   const done = Object.values(progresso).filter(Boolean).length;

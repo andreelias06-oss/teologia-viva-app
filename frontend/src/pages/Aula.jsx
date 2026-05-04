@@ -8,6 +8,7 @@ import AITutorDrawer from '../components/AITutorDrawer';
 import UpgradeModal from '../components/UpgradeModal';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessLesson, effectivePlan } from '../lib/plan';
+import { markComplete as savePersistComplete, subscribeProgress } from '../lib/progresso';
 import { toast } from 'sonner';
 
 function youtubeEmbed(url) {
@@ -44,33 +45,45 @@ export default function Aula() {
       const { data } = await supabase.from('aulas').select('*').eq('id', id).maybeSingle();
       if (!active) return;
       setAula(data);
-      if (data?.curso_id && user?.id) {
-        try {
-          const raw = localStorage.getItem(`tv_progress_${user.id}_${data.curso_id}`);
-          const obj = raw ? JSON.parse(raw) : {};
-          setCompleted(!!obj[id]);
-        } catch { /* ignore */ }
+      if (user?.id && id) {
+        const { data: prog } = await supabase
+          .from('progresso_aulas')
+          .select('aula_id')
+          .eq('user_id', user.id)
+          .eq('aula_id', id)
+          .maybeSingle();
+        if (active) setCompleted(!!prog);
       }
       setLoading(false);
     })();
     return () => { active = false; };
   }, [id, user?.id]);
 
-  const accessible = aula ? canAccessLesson(profile, aula) : true;
-  const embed = useMemo(() => youtubeEmbed(aula?.url_video || aula?.video_url), [aula]);
+  // Realtime: outro dispositivo marca/desmarca esta aula → atualiza UI instantaneamente.
+  useEffect(() => {
+    if (!user?.id || !id) return;
+    const unsub = subscribeProgress(user.id, (payload) => {
+      const aulaId = payload.new?.aula_id ?? payload.old?.aula_id;
+      if (Number(aulaId) !== Number(id)) return;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') setCompleted(true);
+      else if (payload.eventType === 'DELETE') setCompleted(false);
+    });
+    return unsub;
+  }, [user?.id, id]);
 
-  const markComplete = () => {
-    if (!aula?.curso_id || !user?.id) return;
+  const markComplete = async () => {
+    if (!aula?.id || !user?.id) return;
     try {
-      const key = `tv_progress_${user.id}_${aula.curso_id}`;
-      const raw = localStorage.getItem(key);
-      const obj = raw ? JSON.parse(raw) : {};
-      obj[id] = true;
-      localStorage.setItem(key, JSON.stringify(obj));
+      await savePersistComplete({ userId: user.id, aulaId: aula.id, cursoId: aula.curso_id });
       setCompleted(true);
       toast.success('Aula marcada como concluída');
-    } catch { /* ignore */ }
+    } catch (e) {
+      toast.error('Falha ao salvar progresso');
+    }
   };
+
+  const accessible = aula ? canAccessLesson(profile, aula) : true;
+  const embed = useMemo(() => youtubeEmbed(aula?.url_video || aula?.video_url), [aula]);
 
   const contextoTutor = aula
     ? `Aula: ${aula.titulo}\n\nLeitura bíblica: ${aula.leitura_biblica || '—'}\n\nTexto de apoio: ${(aula.conteudo_texto || aula.texto_apoio || aula.descricao || '').slice(0, 1500)}`

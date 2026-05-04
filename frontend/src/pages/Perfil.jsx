@@ -19,9 +19,11 @@ export default function Perfil() {
   const [progressoAtual, setProgressoAtual] = useState({ curso: null, pct: 0, totalAulas: 0, doneAulas: 0 });
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  // Notificações de devocional
+  // Notificações de devocional + meditação
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [meditacaoEnabled, setMeditacaoEnabled] = useState(false);
+  const [meditacaoLoading, setMeditacaoLoading] = useState(false);
   const pushSupported = isPushSupported();
 
   const plan = effectivePlan(profile);
@@ -30,47 +32,64 @@ export default function Perfil() {
 
   useEffect(() => {
     if (!user?.id) return;
+    let active = true;
     (async () => {
-      // Find a course with progress in localStorage
-      const keys = Object.keys(localStorage).filter((k) => k.startsWith(`tv_progress_${user.id}_`));
-      let best = null;
-      for (const k of keys) {
-        try {
-          const obj = JSON.parse(localStorage.getItem(k) || '{}');
-          const done = Object.values(obj).filter(Boolean).length;
-          if (done > 0) {
-            const cursoId = k.split(`tv_progress_${user.id}_`)[1];
-            best = { cursoId, done };
-            break;
-          }
-        } catch { /* ignore */ }
-      }
-      if (best) {
-        const [{ data: curso }, { data: aulas }] = await Promise.all([
-          supabase.from('cursos').select('*').eq('id', best.cursoId).maybeSingle(),
-          supabase.from('aulas').select('id').eq('curso_id', best.cursoId),
-        ]);
-        const total = aulas?.length || 0;
-        const pct = total ? Math.round((best.done / total) * 100) : 0;
-        setProgressoAtual({ curso, pct, totalAulas: total, doneAulas: best.done });
-      }
+      // Busca o curso com mais aulas concluídas no Supabase.
+      const { data: rows } = await supabase
+        .from('progresso_aulas')
+        .select('curso_id')
+        .eq('user_id', user.id)
+        .not('curso_id', 'is', null);
+      if (!active) return;
+      if (!rows || rows.length === 0) return;
+      const counts = {};
+      rows.forEach((r) => { counts[r.curso_id] = (counts[r.curso_id] || 0) + 1; });
+      const bestCursoId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (!bestCursoId) return;
+      const done = counts[bestCursoId];
+      const [{ data: curso }, { data: aulas }] = await Promise.all([
+        supabase.from('cursos').select('*').eq('id', bestCursoId).maybeSingle(),
+        supabase.from('aulas').select('id').eq('curso_id', bestCursoId),
+      ]);
+      if (!active) return;
+      const total = aulas?.length || 0;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      setProgressoAtual({ curso, pct, totalAulas: total, doneAulas: done });
     })();
+    return () => { active = false; };
   }, [user?.id]);
 
-  // Sincroniza estado do switch com profile.notif_devocional + subscription real do navegador
+  // Sincroniza estado dos switches com profile + subscription real do navegador
   useEffect(() => {
     let active = true;
     (async () => {
       if (!pushSupported) {
-        if (active) setNotifEnabled(false);
+        if (active) { setNotifEnabled(false); setMeditacaoEnabled(false); }
         return;
       }
       const sub = await getCurrentSubscription();
-      const dbEnabled = !!profile?.notif_devocional;
-      if (active) setNotifEnabled(dbEnabled && !!sub);
+      const dbDevo = !!profile?.notif_devocional;
+      const dbMed = !!profile?.notif_meditacao;
+      if (active) {
+        setNotifEnabled(dbDevo && !!sub);
+        setMeditacaoEnabled(dbMed && !!sub);
+      }
     })();
     return () => { active = false; };
-  }, [profile?.notif_devocional, pushSupported]);
+  }, [profile?.notif_devocional, profile?.notif_meditacao, pushSupported]);
+
+  // Garante que existe uma subscription ativa antes de salvar a preferência.
+  // Reutiliza a mesma subscription para os dois tipos de push.
+  const ensureSubscription = async () => {
+    if (!user?.id) return false;
+    try {
+      await subscribePush(user.id);
+      return true;
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao habilitar notificações');
+      return false;
+    }
+  };
 
   const toggleNotif = async (next) => {
     if (!user?.id) return;
@@ -81,20 +100,49 @@ export default function Perfil() {
     setNotifLoading(true);
     try {
       if (next) {
-        await subscribePush(user.id);
+        const ok = await ensureSubscription();
+        if (!ok) return;
         await supabase.from('profiles').update({ notif_devocional: true }).eq('id', user.id);
         setNotifEnabled(true);
-        toast.success('Notificações ativadas!');
+        toast.success('Notificação do devocional ativada!');
       } else {
-        await unsubscribePush();
         await supabase.from('profiles').update({ notif_devocional: false }).eq('id', user.id);
         setNotifEnabled(false);
-        toast.success('Notificações desativadas');
+        // Só remove a subscription se NENHUM dos dois estiver ativo.
+        if (!meditacaoEnabled) await unsubscribePush();
+        toast.success('Notificação do devocional desativada');
       }
     } catch (e) {
       toast.error(e?.message || 'Falha ao atualizar notificações');
     } finally {
       setNotifLoading(false);
+    }
+  };
+
+  const toggleMeditacao = async (next) => {
+    if (!user?.id) return;
+    if (!pushSupported) {
+      toast.error('Notificações não são suportadas neste dispositivo.');
+      return;
+    }
+    setMeditacaoLoading(true);
+    try {
+      if (next) {
+        const ok = await ensureSubscription();
+        if (!ok) return;
+        await supabase.from('profiles').update({ notif_meditacao: true }).eq('id', user.id);
+        setMeditacaoEnabled(true);
+        toast.success('Lembrete de meditação ativado!');
+      } else {
+        await supabase.from('profiles').update({ notif_meditacao: false }).eq('id', user.id);
+        setMeditacaoEnabled(false);
+        if (!notifEnabled) await unsubscribePush();
+        toast.success('Lembrete de meditação desativado');
+      }
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao atualizar notificações');
+    } finally {
+      setMeditacaoLoading(false);
     }
   };
 
@@ -198,6 +246,23 @@ export default function Perfil() {
             checked={notifEnabled}
             disabled={!pushSupported || notifLoading}
             onCheckedChange={toggleNotif}
+          />
+        </div>
+
+        <div className="border-t border-gold/10" />
+
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="font-sans text-sm text-foreground">Lembrete de meditação</p>
+            <p className="font-sans text-xs text-foreground/60 mt-0.5">
+              Receba um lembrete às 18:00 para retomar o devocional do dia. <span className="text-gold/80">Opcional.</span>
+            </p>
+          </div>
+          <Switch
+            data-testid="switch-notif-meditacao"
+            checked={meditacaoEnabled}
+            disabled={!pushSupported || meditacaoLoading}
+            onCheckedChange={toggleMeditacao}
           />
         </div>
       </div>

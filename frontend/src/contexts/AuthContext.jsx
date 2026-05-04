@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { migrateLocalProgressToSupabase } from '../lib/progresso';
 
 const AuthCtx = createContext(null);
 
@@ -41,13 +42,19 @@ export function AuthProvider({ children }) {
       setUser(data.session?.user || null);
       setLoading(false);
       // Load profile in background so loader unblocks quickly
-      if (data.session?.user) loadProfile(data.session.user.id);
+      if (data.session?.user) {
+        loadProfile(data.session.user.id);
+        migrateLocalProgressToSupabase(data.session.user.id).catch(() => { /* ignore */ });
+      }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, sess) => {
       setSession(sess);
       setUser(sess?.user || null);
-      if (sess?.user) loadProfile(sess.user.id);
+      if (sess?.user) {
+        loadProfile(sess.user.id);
+        migrateLocalProgressToSupabase(sess.user.id).catch(() => { /* ignore */ });
+      }
       else setProfile(null);
     });
     return () => {
