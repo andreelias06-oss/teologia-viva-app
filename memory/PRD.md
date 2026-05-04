@@ -59,7 +59,16 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
   - Drawer em z-index 220, Sheet de cores em 210, todos via Radix Portal.
   - `console.log` no `toggleVerse` para debug do estado de seleção.
   - **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
-  - **Bíblia — Modal fullscreen no mobile + supressão de toques (04/mai/2026)**:
+  - **Web Push Notifications do Devocional Diário (04/mai/2026)**:
+    - **VAPID keys** geradas localmente (P-256). Public key em `frontend/.env` (`REACT_APP_VAPID_PUBLIC_KEY`); Private + Subject (`mailto:contato@teologiaviva.app`) nas Edge Function secrets do Supabase.
+    - **Service Worker** `/public/sw.js` — handlers `push` (showNotification) e `notificationclick` (foco/abrir app).
+    - **Tabela `push_subscriptions`** (user_id, endpoint, p256dh, auth, user_agent) com RLS — usuário gerencia suas próprias inscrições; service_role lê todas.
+    - **Coluna `profiles.notif_devocional`** (bool default false) — preferência do usuário.
+    - **`lib/push.js`** — `subscribePush()`, `unsubscribePush()`, `getCurrentSubscription()`, `isPushSupported()`. Upsert por endpoint.
+    - **Switch no Perfil** (`data-testid="switch-notif-devocional"`) — pede permissão, faz subscribe via PushManager, salva no Supabase. Desabilitado em browsers sem suporte.
+    - **Edge Function `send-devotional-push`** — Deno + `npm:web-push@3.6.7`. Carrega devocional do dia, busca subs com `notif_devocional=true`, envia em paralelo, remove endpoints expirados (404/410). Suporta `dryRun: true`.
+    - **pg_cron** `send-devotional-push-daily` agendado em **`0 10 * * *`** (10:00 UTC = 07:00 BRT) via `net.http_post` com Bearer service_role.
+    - **Mensagem padrão**: "☕ Seu devocional de hoje já está disponível!" + título do devocional.
     - Detecta dispositivo via `matchMedia('(pointer: coarse)')` — no S24 Ultra retorna true.
     - **Mobile**: troca o `<Drawer>` Vaul por um **modal fullscreen** (`position: fixed inset:0 z-99998`) sem animação de slide, sem teclado-induced reflow.
     - **Desktop**: mantém o Drawer Vaul tradicional com animação suave.

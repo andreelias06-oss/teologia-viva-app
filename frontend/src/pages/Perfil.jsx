@@ -4,17 +4,25 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
+import { Switch } from '../components/ui/switch';
 import { effectivePlan, trialDaysLeft, getAICallsToday, PLAN } from '../lib/plan';
-import { LogOut, NotebookPen, Sparkles, Crown, Shield } from 'lucide-react';
+import { LogOut, NotebookPen, Sparkles, Crown, Shield, Bell } from 'lucide-react';
 import StreakBadge from '../components/StreakBadge';
 import UpgradeModal from '../components/UpgradeModal';
 import { isAdmin } from '../lib/admin';
+import { isPushSupported, subscribePush, unsubscribePush, getCurrentSubscription } from '../lib/push';
+import { toast } from 'sonner';
 
 export default function Perfil() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [progressoAtual, setProgressoAtual] = useState({ curso: null, pct: 0, totalAulas: 0, doneAulas: 0 });
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  // Notificações de devocional
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const pushSupported = isPushSupported();
 
   const plan = effectivePlan(profile);
   const days = trialDaysLeft(profile);
@@ -48,6 +56,47 @@ export default function Perfil() {
       }
     })();
   }, [user?.id]);
+
+  // Sincroniza estado do switch com profile.notif_devocional + subscription real do navegador
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!pushSupported) {
+        if (active) setNotifEnabled(false);
+        return;
+      }
+      const sub = await getCurrentSubscription();
+      const dbEnabled = !!profile?.notif_devocional;
+      if (active) setNotifEnabled(dbEnabled && !!sub);
+    })();
+    return () => { active = false; };
+  }, [profile?.notif_devocional, pushSupported]);
+
+  const toggleNotif = async (next) => {
+    if (!user?.id) return;
+    if (!pushSupported) {
+      toast.error('Notificações não são suportadas neste dispositivo.');
+      return;
+    }
+    setNotifLoading(true);
+    try {
+      if (next) {
+        await subscribePush(user.id);
+        await supabase.from('profiles').update({ notif_devocional: true }).eq('id', user.id);
+        setNotifEnabled(true);
+        toast.success('Notificações ativadas!');
+      } else {
+        await unsubscribePush();
+        await supabase.from('profiles').update({ notif_devocional: false }).eq('id', user.id);
+        setNotifEnabled(false);
+        toast.success('Notificações desativadas');
+      }
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao atualizar notificações');
+    } finally {
+      setNotifLoading(false);
+    }
+  };
 
   const planLabel = plan === PLAN.PREMIUM ? 'Premium' : plan === PLAN.TRIAL ? `Trial · ${days} dia(s)` : 'Free';
 
@@ -126,6 +175,32 @@ export default function Perfil() {
           Comece um curso na Academia para acompanhar seu progresso aqui.
         </div>
       )}
+
+      <div className="rounded-2xl border border-gold/15 bg-navy-light/30 p-5 space-y-4" data-testid="config-notif">
+        <div className="flex items-center gap-3">
+          <Bell size={18} className="text-gold" />
+          <p className="text-[10px] uppercase tracking-[0.18em] text-gold/80 font-sans font-semibold">Configurações</p>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="font-sans text-sm text-foreground">Notificação do devocional diário</p>
+            <p className="font-sans text-xs text-foreground/60 mt-0.5">
+              Receba um aviso toda manhã (07:00) com o devocional do dia.
+            </p>
+            {!pushSupported && (
+              <p className="font-sans text-xs text-destructive-foreground/80 mt-1">
+                Indisponível neste navegador.
+              </p>
+            )}
+          </div>
+          <Switch
+            data-testid="switch-notif-devocional"
+            checked={notifEnabled}
+            disabled={!pushSupported || notifLoading}
+            onCheckedChange={toggleNotif}
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-3">
         <Button
