@@ -7,12 +7,14 @@ import { Progress } from '../components/ui/progress';
 import { effectivePlan, trialDaysLeft, getAICallsToday, PLAN } from '../lib/plan';
 import { LogOut, NotebookPen, Sparkles, Crown, Shield } from 'lucide-react';
 import StreakBadge from '../components/StreakBadge';
+import UpgradeModal from '../components/UpgradeModal';
 import { isAdmin } from '../lib/admin';
 
 export default function Perfil() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [progressoAtual, setProgressoAtual] = useState({ curso: null, pct: 0, totalAulas: 0, doneAulas: 0 });
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const plan = effectivePlan(profile);
   const days = trialDaysLeft(profile);
@@ -75,7 +77,11 @@ export default function Perfil() {
             <p className="font-serif text-2xl text-foreground" data-testid="perfil-plano">{planLabel}</p>
           </div>
           {plan !== PLAN.PREMIUM && (
-            <Button data-testid="btn-fazer-upgrade" className="bg-gold text-navy-dark hover:bg-gold-soft h-9">
+            <Button
+              data-testid="btn-fazer-upgrade"
+              onClick={() => setUpgradeOpen(true)}
+              className="bg-gold text-navy-dark hover:bg-gold-soft h-9"
+            >
               Upgrade
             </Button>
           )}
@@ -149,6 +155,8 @@ export default function Perfil() {
           <LogOut size={16} className="mr-2" /> Sair
         </Button>
       </div>
+
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
     </div>
   );
 }

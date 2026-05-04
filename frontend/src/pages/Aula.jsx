@@ -5,6 +5,7 @@ import { ArrowLeft, MessageCircleQuestion, Sparkles, Lock, Check } from 'lucide-
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import AITutorDrawer from '../components/AITutorDrawer';
+import UpgradeModal from '../components/UpgradeModal';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessLesson, effectivePlan } from '../lib/plan';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ export default function Aula() {
   const [loading, setLoading] = useState(true);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, user } = useAuth();
   const plan = effectivePlan(profile);
@@ -101,13 +103,14 @@ export default function Aula() {
             Esta aula está disponível apenas no plano Premium. Faça upgrade para ter acesso completo às aulas da Academia.
           </p>
           <Button
-            onClick={() => navigate('/perfil')}
+            onClick={() => setUpgradeOpen(true)}
             data-testid="btn-upgrade"
             className="bg-gold text-navy-dark hover:bg-gold-soft"
           >
             Ver opções de plano
           </Button>
         </div>
+        <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
       </div>
     );
   }
