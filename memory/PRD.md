@@ -49,14 +49,16 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 
 ## Implementado (04/mai/2026)
 - [x] **Bíblia consumida 100% do Supabase** — tabela `biblia` recriada com schema `(versao, abbrev, name, ordem, testamento, chapters jsonb)` e PK composto `(versao, abbrev)`. Populada com **3 versões completas** (NVI, ACF, AA — Almeida Atualizada), 66 livros cada, 198 linhas no total. RLS habilitado com policy de leitura pública.
-- [x] `lib/bible.js` totalmente refatorado: `listBooks(versao)`, `getChaptersCount(abbrev, versao)`, `fetchChapter(abbrev, chapter, versao)` — sem dependência de APIs externas. Cache em memória da lista de livros.
+- [x] `lib/bible.js` totalmente refatorado: `listBooks(versao)`, `getChaptersCount(abbrev, versao)`, `fetchChapter(abbrev, chapter, versao)` — sem dependência de APIs externas. Cache em memória da lista de livros. Range explícito `0-99` para garantir os 66 livros.
 - [x] **`Biblia.jsx` reescrito**:
-  - Header com 2 linhas: (1) Seletor de versão + botão Aa, (2) Picker de livro/capítulo + Prev/Next. Sempre visíveis acima do texto.
+  - Header em 2 linhas: (1) Seletor de versão + botão Aa, (2) Picker de livro/capítulo + Prev/Next. **Sticky no topo** com fundo navy/95 + backdrop blur. h-11 nos botões para serem clicáveis em mobile.
   - 4 tamanhos de fonte (sm/md/lg/xl) cicláveis pelo Aa, persistidos.
-  - Versão e livro/capítulo persistidos em `localStorage`.
-  - Barra flutuante de seleção com **z-index 200**, posicionada via `bottom: calc(env(safe-area-inset-bottom) + 92px)`, com 3 botões claros: **Destacar** / **Tutor IA** / **Menu**.
-  - Botão **Tutor IA** abre o Drawer e dispara automaticamente a explicação combinada de todos os versículos selecionados (closure-safe via `versesNow`).
-  - Drawer agora em z-index 220, Sheet de cores rápidas em 210.
+  - Versão e livro/capítulo persistidos em `localStorage` (com migração automática de chaves antigas).
+  - **Barra flutuante via React Portal no `document.body`** (fix para bug de containing block causado por `transform` da animação `animate-fade-up`). Fundo sólido `#1A1A1A`, z-index 9999, borda dourada 2px.
+  - 3 botões claros: **Destacar** (Sheet de cores) / **Tutor IA** (dourado central — abre Drawer + dispara IA com texto de todos os versículos selecionados) / **Menu** (Drawer completo).
+  - Drawer em z-index 220, Sheet de cores em 210, todos via Radix Portal.
+  - `console.log` no `toggleVerse` para debug do estado de seleção.
+- [x] **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
 - [x] **Devocional restaurado ao topo** da Início (`Inicio.jsx`): card grande aparece logo após o título da seção; StreakBadge movido para baixo do devocional.
 - [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update.
 

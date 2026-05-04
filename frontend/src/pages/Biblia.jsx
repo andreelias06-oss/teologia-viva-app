@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchChapter, listBooks, getChaptersCount, TRANSLATIONS, DEFAULT_TRANSLATION } from '../lib/bible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '../components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
@@ -45,7 +46,12 @@ export default function Biblia() {
 
   const [books, setBooks] = useState([]);
   const [bookId, setBookId] = useState(() => {
-    try { return localStorage.getItem(LS_BOOK) || 'jo'; } catch { return 'jo'; }
+    try {
+      const raw = localStorage.getItem(LS_BOOK);
+      // Migração: schema antigo usava ids tipo "joao", "genesis". Agora usamos abbrev "jo", "gn".
+      if (raw && raw.length > 4) return 'jo';
+      return raw || 'jo';
+    } catch { return 'jo'; }
   });
   const [chapter, setChapter] = useState(() => {
     try { return parseInt(localStorage.getItem(LS_CHAPTER) || '3', 10); } catch { return 3; }
@@ -154,8 +160,10 @@ export default function Biblia() {
   const toggleVerse = (v) => {
     setSelectedVerses((prev) => {
       const exists = prev.some((x) => x.number === v.number);
-      if (exists) return prev.filter((x) => x.number !== v.number);
-      return [...prev, v];
+      const next = exists ? prev.filter((x) => x.number !== v.number) : [...prev, v];
+      // eslint-disable-next-line no-console
+      console.log('[Biblia] toggleVerse', v.number, '→ selectedCount:', next.length);
+      return next;
     });
   };
 
@@ -268,15 +276,16 @@ export default function Biblia() {
     }
   };
 
-  // Tutor IA da barra flutuante: abre o drawer + dispara IA com os textos selecionados
+  // Tutor IA da barra flutuante: abre o drawer + dispara IA com os textos selecionados.
+  // Captura o snapshot dos versículos para evitar staleness do closure.
   const openTutorIA = () => {
     if (selectedVerses.length === 0) return;
-    if (isSingle) setDraftObs(notes[selectedVerses[0].number]?.observacao || '');
-    else setDraftObs('');
-    setDrawerOpen(true);
-    // captura a lista atual e passa explicitamente para evitar staleness
     const versesNow = selectedVerses.slice();
-    setTimeout(() => { runAIExplain(versesNow); }, 80);
+    if (versesNow.length === 1) setDraftObs(notes[versesNow[0].number]?.observacao || '');
+    else setDraftObs('');
+    setExplanation('');
+    setDrawerOpen(true);
+    runAIExplain(versesNow);
   };
 
   // Abre o drawer (Menu de estudo) sem disparar a IA automaticamente
@@ -332,14 +341,19 @@ export default function Biblia() {
         <div className="gold-divider w-16 mt-1" />
       </section>
 
-      {/* Controles principais: Versão + Aa em uma linha; Livro/Capítulo + Prev/Next em outra. */}
-      <div className="space-y-2" data-testid="biblia-controls">
+      {/* Controles principais STICKY: ficam fixos no topo enquanto rola.
+          Sticky relativo ao Layout, que tem header próprio em top-0. Empilhamos abaixo dele. */}
+      <div
+        className="sticky z-30 -mx-5 px-5 py-3 bg-navy-dark/95 backdrop-blur-md border-b border-gold/10 space-y-2"
+        style={{ top: 0 }}
+        data-testid="biblia-controls"
+      >
         <div className="flex items-center gap-2">
           <select
             data-testid="biblia-translation-select"
             value={translationId}
             onChange={(e) => handleTranslationChange(e.target.value)}
-            className="flex-1 h-10 rounded-md bg-navy-light/30 border border-gold/30 text-foreground px-3 text-sm font-sans"
+            className="flex-1 h-11 rounded-md bg-navy-light/60 border border-gold/40 text-foreground px-3 text-sm font-sans font-semibold"
           >
             {TRANSLATIONS.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
@@ -349,7 +363,7 @@ export default function Biblia() {
             data-testid="biblia-font-size"
             onClick={cycleFontSize}
             variant="outline"
-            className="border-gold/30 text-gold hover:bg-gold/10 h-10 px-3"
+            className="border-gold/40 bg-navy-light/40 text-gold hover:bg-gold/15 h-11 px-3 shrink-0"
             aria-label="Tamanho do texto"
           >
             <Type size={14} className="mr-1" />
@@ -363,13 +377,13 @@ export default function Biblia() {
             data-testid="biblia-book-picker"
             variant="outline"
             onClick={() => setPickerOpen(true)}
-            className="flex-1 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50"
+            className="flex-1 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50 h-11"
           >
             <BookOpen size={16} className="mr-2 text-gold" />
             {book?.nome || '—'} {chapter}
           </Button>
-          <Button onClick={goPrev} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-prev"><ChevronLeft size={18} /></Button>
-          <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold" data-testid="biblia-next"><ChevronRight size={18} /></Button>
+          <Button onClick={goPrev} variant="outline" size="icon" className="border-gold/30 text-gold h-11 w-11 shrink-0" data-testid="biblia-prev"><ChevronLeft size={18} /></Button>
+          <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold h-11 w-11 shrink-0" data-testid="biblia-next"><ChevronRight size={18} /></Button>
         </div>
       </div>
 
@@ -469,58 +483,72 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Barra de ação flutuante — z-index altíssimo, fixa em bottom acima da bottom-nav */}
-      {selectedVerses.length > 0 ? (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[200] w-[94%] max-w-md"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)' }}
-          data-testid="selection-bar"
-        >
-          <div className="rounded-2xl border-2 border-gold/40 bg-navy-dark/98 backdrop-blur-xl px-3 py-3 shadow-2xl shadow-black/60 space-y-2">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={clearSelection}
-                data-testid="selection-clear"
-                className="text-foreground/70 hover:text-foreground shrink-0"
-                aria-label="Limpar seleção"
-              >
-                <X size={18} />
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">
-                  {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
-                </p>
-                <p className="text-sm text-foreground truncate font-serif">{refLabel}</p>
+      {/* Barra de ação flutuante — fundo sólido para garantir visibilidade em todos os dispositivos.
+          Renderizada como Portal no <body> para evitar bug do containing block do animate-fade-up
+          (transform no ancestral faz position:fixed virar position:absolute). */}
+      {selectedVerses.length > 0 && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed left-1/2 -translate-x-1/2 w-[94%] max-w-md"
+              style={{
+                bottom: 'calc(env(safe-area-inset-bottom, 0px) + 100px)',
+                zIndex: 9999,
+                background: '#1A1A1A',
+                borderRadius: '16px',
+                border: '2px solid rgba(212, 175, 55, 0.55)',
+                boxShadow: '0 18px 38px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(212, 175, 55, 0.15)',
+                padding: '12px',
+              }}
+              data-testid="selection-bar"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={clearSelection}
+                    data-testid="selection-clear"
+                    className="text-foreground/70 hover:text-foreground shrink-0"
+                    aria-label="Limpar seleção"
+                    style={{ padding: '4px' }}
+                  >
+                    <X size={18} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">
+                      {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm text-foreground truncate font-serif">{refLabel}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    data-testid="selection-highlight"
+                    onClick={() => setHighlightSheetOpen(true)}
+                    variant="outline"
+                    className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
+                  >
+                    <Highlighter size={14} className="mr-1 text-gold" /> Destacar
+                  </Button>
+                  <Button
+                    data-testid="selection-tutor-ia"
+                    onClick={openTutorIA}
+                    className="bg-gold text-navy-dark hover:bg-gold-soft h-10 text-xs font-sans font-semibold"
+                  >
+                    <Sparkles size={14} className="mr-1" /> Tutor IA
+                  </Button>
+                  <Button
+                    data-testid="selection-open-study"
+                    onClick={openStudyMenu}
+                    variant="outline"
+                    className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
+                  >
+                    <FileText size={14} className="mr-1 text-gold" /> Menu
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                data-testid="selection-highlight"
-                onClick={() => setHighlightSheetOpen(true)}
-                variant="outline"
-                className="border-gold/40 bg-navy-light/30 text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
-              >
-                <Highlighter size={14} className="mr-1 text-gold" /> Destacar
-              </Button>
-              <Button
-                data-testid="selection-tutor-ia"
-                onClick={openTutorIA}
-                className="bg-gold text-navy-dark hover:bg-gold-soft h-10 text-xs font-sans font-semibold"
-              >
-                <Sparkles size={14} className="mr-1" /> Tutor IA
-              </Button>
-              <Button
-                data-testid="selection-open-study"
-                onClick={openStudyMenu}
-                variant="outline"
-                className="border-gold/40 bg-navy-light/30 text-foreground hover:bg-gold/15 h-10 text-xs font-sans"
-              >
-                <FileText size={14} className="mr-1 text-gold" /> Menu
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
 
       {/* Sheet rápido de cores para "Destacar" da barra flutuante */}
       <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>

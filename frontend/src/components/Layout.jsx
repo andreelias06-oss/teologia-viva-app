@@ -45,7 +45,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 px-5 py-5 animate-fade-up">
+        <main className="flex-1 px-5 py-5">
           <Outlet />
         </main>
 

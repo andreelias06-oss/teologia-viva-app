@@ -20,16 +20,18 @@ export const DEFAULT_TRANSLATION = 'nvi';
 const _booksCache = {};
 
 // Busca a lista de livros (sem `chapters`) ordenados.
+// Usamos range explícito 0-65 para garantir os 66 livros sem qualquer limite implícito do PostgREST.
 export async function listBooks(versao = DEFAULT_TRANSLATION) {
   if (_booksCache[versao]) return _booksCache[versao];
   const { data, error } = await supabase
     .from('biblia')
     .select('versao, abbrev, name, ordem, testamento')
     .eq('versao', versao)
-    .order('ordem', { ascending: true });
+    .order('ordem', { ascending: true })
+    .range(0, 99);
   if (error) throw error;
   _booksCache[versao] = (data || []).map((b) => ({
-    id: b.abbrev,            // mantém compatibilidade: "id" é o abbrev
+    id: b.abbrev,
     abbrev: b.abbrev,
     nome: b.name,
     ot: b.testamento === 'AT',
