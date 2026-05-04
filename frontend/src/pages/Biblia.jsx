@@ -65,13 +65,40 @@ export default function Biblia() {
   // Seleção múltipla (lista da Bíblia)
   const [selectedVerses, setSelectedVerses] = useState([]);
 
+  // Detecta dispositivo touch (mobile/tablet com touch) — no S24 Ultra retorna true.
+  // Mobile recebe MODAL FULLSCREEN sem Vaul/animação para eliminar o crash insertBefore.
+  const [isMobile, setIsMobile] = useState(() => {
+    try {
+      return typeof window !== 'undefined'
+        && window.matchMedia('(pointer: coarse)').matches;
+    } catch { return false; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener?.('change', handler);
+    return () => mq.removeEventListener?.('change', handler);
+  }, []);
+
+  // Quando o modal/drawer abre no mobile, suspende interações da lista por 1 segundo.
+  const [suspendList, setSuspendList] = useState(false);
+
   // ESTADO ISOLADO DO DRAWER — desacoplado da seleção da Bíblia.
-  // O drawer mantém sua própria cópia dos versículos para evitar conflitos de reconciliação
-  // quando a lista da Bíblia muda (highlight/seleção/etc) enquanto o drawer está aberto.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerVerses, setDrawerVerses] = useState([]);
-  const aiVersesRef = useRef(null);     // versículos pendentes para a IA
-  const [aiNonce, setAiNonce] = useState(0);  // bump quando queremos disparar a IA
+  const aiVersesRef = useRef(null);
+  const [aiNonce, setAiNonce] = useState(0);
+
+  // Trava o scroll do body enquanto modal mobile está aberto
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (drawerOpen && isMobile) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [drawerOpen, isMobile]);
 
   const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
 
@@ -171,6 +198,7 @@ export default function Biblia() {
   const singleNote = isSingleDrawer ? notes[drawerVerses[0].number] : null;
 
   const toggleVerse = (v) => {
+    if (suspendList) return;  // ignora toques durante a suspensão de 1s
     setSelectedVerses((prev) => {
       const exists = prev.some((x) => x.number === v.number);
       const next = exists ? prev.filter((x) => x.number !== v.number) : [...prev, v];
@@ -299,31 +327,49 @@ export default function Biblia() {
   // Passo 2: limpa selectedVerses (fecha a barra) — encerra a renderização da seleção na lista.
   // Passo 3: setTimeout(100ms) → React respira → setDrawerVerses + setDrawerOpen(true).
   // Passo 4: useEffect dispara IA quando drawer já está aberto (delay 320ms para Vaul terminar).
+  // Helper: blur active element + scroll para topo (preventScroll do teclado Android)
+  const prepareForModal = () => {
+    if (typeof document === 'undefined') return;
+    const ae = document.activeElement;
+    if (ae && typeof ae.blur === 'function') {
+      try { ae.blur(); } catch { /* ignore */ }
+    }
+    try {
+      window.scrollTo({ top: window.scrollY, left: 0, behavior: 'instant' });
+    } catch { /* ignore */ }
+  };
+
   const openTutorIA = () => {
     if (selectedVerses.length === 0) return;
+    prepareForModal();
     const snapshot = selectedVerses.slice();
     aiVersesRef.current = snapshot;
-    setSelectedVerses([]);  // fecha a barra IMEDIATAMENTE
+    setSuspendList(true);
+    setSelectedVerses([]);
     setExplanation('');
     setDraftObs('');
     window.setTimeout(() => {
       setDrawerVerses(snapshot);
       if (snapshot.length === 1) setDraftObs(notes[snapshot[0].number]?.observacao || '');
       setDrawerOpen(true);
-      setAiNonce((n) => n + 1);  // dispara o useEffect da IA
+      setAiNonce((n) => n + 1);
+      window.setTimeout(() => setSuspendList(false), 1000);
     }, 100);
   };
 
   const openStudyMenu = () => {
     if (selectedVerses.length === 0) return;
+    prepareForModal();
     const snapshot = selectedVerses.slice();
-    setSelectedVerses([]);  // fecha a barra IMEDIATAMENTE
+    setSuspendList(true);
+    setSelectedVerses([]);
     setExplanation('');
     setDraftObs('');
     window.setTimeout(() => {
       setDrawerVerses(snapshot);
       if (snapshot.length === 1) setDraftObs(notes[snapshot[0].number]?.observacao || '');
       setDrawerOpen(true);
+      window.setTimeout(() => setSuspendList(false), 1000);
     }, 100);
   };
 
@@ -675,29 +721,10 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Drawer — Menu de estudo. Usa estado ISOLADO `drawerVerses` desacoplado da seleção da Bíblia. */}
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerContent
-          key={`drawer-${drawerKey}`}
-          className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]"
-        >
-          <DrawerHeader className="border-b border-gold/10 pb-3">
-            <DrawerTitle className="font-serif text-xl text-gold" data-testid="drawer-ref">
-              {refLabel}
-            </DrawerTitle>
-            <DrawerDescription className="text-foreground/85 font-serif italic text-base leading-relaxed pt-2 max-h-32 overflow-y-auto">
-              {drawerVerses
-                .slice()
-                .sort((a, b) => a.number - b.number)
-                .map((v) => (
-                  <span key={`dv-${v.number}`} className="block">
-                    <span className="text-gold-muted text-xs mr-1">{v.number}</span>
-                    {v.text}
-                  </span>
-                ))}
-            </DrawerDescription>
-          </DrawerHeader>
-
+      {/* CONTEÚDO DE ESTUDO — renderizado em Drawer (desktop) ou Modal Fullscreen (mobile).
+          Extraído como variável JSX para evitar duplicação. */}
+      {(() => {
+        const studyBody = (
           <div
             key={`study-${drawerKey}`}
             className="overflow-y-auto px-5 py-4 space-y-5"
@@ -835,8 +862,92 @@ export default function Biblia() {
               </ErrorBoundary>
             </section>
           </div>
-        </DrawerContent>
-      </Drawer>
+        );
+
+        // === MOBILE: Modal fullscreen sem Vaul, sem animação de slide ===
+        if (isMobile) {
+          if (!drawerOpen) return null;
+          return (
+            <div
+              key={`mobile-modal-${drawerKey}`}
+              data-testid="study-mobile-modal"
+              role="dialog"
+              aria-modal="true"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 99998,
+                background: '#0B1A2C',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Header com botão fechar */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gold/15">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">Menu de estudo</p>
+                  <p className="font-serif text-lg text-gold truncate">{refLabel}</p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="study-mobile-close"
+                  onClick={() => setDrawerOpen(false)}
+                  className="ml-3 w-10 h-10 rounded-full border border-gold/30 text-foreground hover:bg-gold/10 flex items-center justify-center"
+                  aria-label="Fechar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              {/* Versículos */}
+              <div className="px-5 py-3 max-h-[28vh] overflow-y-auto border-b border-gold/10">
+                <div className="text-foreground/90 font-serif italic text-base leading-relaxed">
+                  {drawerVerses
+                    .slice()
+                    .sort((a, b) => a.number - b.number)
+                    .map((v) => (
+                      <span key={`mv-${v.number}`} className="block">
+                        <span className="text-gold-muted text-xs mr-1">{v.number}</span>
+                        {v.text}
+                      </span>
+                    ))}
+                </div>
+              </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto">
+                {studyBody}
+              </div>
+            </div>
+          );
+        }
+
+        // === DESKTOP: Drawer Vaul tradicional ===
+        return (
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DrawerContent
+              key={`drawer-${drawerKey}`}
+              className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]"
+            >
+              <DrawerHeader className="border-b border-gold/10 pb-3">
+                <DrawerTitle className="font-serif text-xl text-gold" data-testid="drawer-ref">
+                  {refLabel}
+                </DrawerTitle>
+                <DrawerDescription className="text-foreground/85 font-serif italic text-base leading-relaxed pt-2 max-h-32 overflow-y-auto">
+                  {drawerVerses
+                    .slice()
+                    .sort((a, b) => a.number - b.number)
+                    .map((v) => (
+                      <span key={`dv-${v.number}`} className="block">
+                        <span className="text-gold-muted text-xs mr-1">{v.number}</span>
+                        {v.text}
+                      </span>
+                    ))}
+                </DrawerDescription>
+              </DrawerHeader>
+              {studyBody}
+            </DrawerContent>
+          </Drawer>
+        );
+      })()}
     </div>
   );
 }
