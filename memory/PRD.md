@@ -58,7 +58,11 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
   - 3 botões claros: **Destacar** (Sheet de cores) / **Tutor IA** (dourado central — abre Drawer + dispara IA com texto de todos os versículos selecionados) / **Menu** (Drawer completo).
   - Drawer em z-index 220, Sheet de cores em 210, todos via Radix Portal.
   - `console.log` no `toggleVerse` para debug do estado de seleção.
-- [x] **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
+  - **Layout — removido `animate-fade-up`** do `<main>` para eliminar o bug que transformava `position: fixed` em `position: absolute` (transform CSS cria novo containing block).
+  - **Bíblia — Anti-crash do Tutor IA na barra flutuante (04/mai/2026)**:
+  - `<DrawerContent>` agora tem `key={drawer-${selectionKey}}` para forçar remount em cada nova seleção (evita reuso de DOM por Vaul).
+  - `openTutorIA` apenas guarda os versos em `pendingAiVerses` e abre o drawer; um `useEffect([drawerOpen, pendingAiVerses])` aguarda 320ms (animação Vaul ≈ 220ms) **após** o drawer estar aberto antes de chamar `runAIExplain`. Elimina o conflito de reconciliação 'Failed to execute insertBefore'.
+  - `ErrorBoundary` agora exibe botão **"Tentar novamente"** que reseta o estado e re-executa via `onRetry`.
 - [x] **Devocional restaurado ao topo** da Início (`Inicio.jsx`): card grande aparece logo após o título da seção; StreakBadge movido para baixo do devocional.
 - [x] **Admin — Fix `body stream already read`**: `lib/admin.js` substituído — `createRow`/`updateRow` agora usam `.select()` (sem `.single()`) e devolvem `data[0]`. Adicionado `clean()` que converte strings vazias em `null` antes do insert/update.
 

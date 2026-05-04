@@ -276,17 +276,35 @@ export default function Biblia() {
     }
   };
 
-  // Tutor IA da barra flutuante: abre o drawer + dispara IA com os textos selecionados.
-  // Captura o snapshot dos versículos para evitar staleness do closure.
+  // Tutor IA da barra flutuante: abre o drawer + dispara IA APÓS o drawer estar totalmente aberto.
+  // O snapshot dos versículos é guardado em `pendingAiVerses` e disparado pelo onOpenChange do Drawer.
+  const [pendingAiVerses, setPendingAiVerses] = useState(null);
+
   const openTutorIA = () => {
     if (selectedVerses.length === 0) return;
     const versesNow = selectedVerses.slice();
     if (versesNow.length === 1) setDraftObs(notes[versesNow[0].number]?.observacao || '');
     else setDraftObs('');
     setExplanation('');
+    setPendingAiVerses(versesNow);
     setDrawerOpen(true);
-    runAIExplain(versesNow);
   };
+
+  // Quando o drawer mudar para aberto e houver versos pendentes, dispara a IA — mas espera o
+  // próximo frame + 220ms (duração da animação do Vaul) para evitar conflito de reconciliação
+  // (clássico bug 'Failed to execute insertBefore on Node' quando a árvore muda durante a entrada).
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!pendingAiVerses || pendingAiVerses.length === 0) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      const versesToRun = pendingAiVerses;
+      setPendingAiVerses(null);
+      runAIExplain(versesToRun);
+    }, 320);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [drawerOpen, pendingAiVerses]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Abre o drawer (Menu de estudo) sem disparar a IA automaticamente
   const openStudyMenu = () => {
@@ -590,9 +608,13 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Drawer — Menu de estudo completo */}
+      {/* Drawer — Menu de estudo completo. `key` força remount limpo a cada nova seleção,
+          evitando crashes de reconciliação do Vaul ('Failed to execute insertBefore'). */}
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerContent className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]">
+        <DrawerContent
+          key={`drawer-${selectionKey}`}
+          className="bg-navy-dark border-gold/20 max-w-md mx-auto z-[220] max-h-[92vh]"
+        >
           <DrawerHeader className="border-b border-gold/10 pb-3">
             <DrawerTitle className="font-serif text-xl text-gold" data-testid="drawer-ref">
               {refLabel}
@@ -737,7 +759,10 @@ export default function Biblia() {
                   <><Sparkles size={16} className="mr-2" /> Explicar com IA</>
                 )}
               </Button>
-              <ErrorBoundary resetKey={selectionKey}>
+              <ErrorBoundary
+                resetKey={selectionKey}
+                onRetry={() => runAIExplain(selectedVerses.slice())}
+              >
                 <div key={`explanation-${selectionKey}`} className="mt-3">
                   <VerseExplanation loading={explaining} text={explanation} />
                 </div>
