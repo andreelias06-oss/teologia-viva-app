@@ -12,11 +12,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen w-full bg-navy-dark flex justify-center">
-      <div className="relative w-full max-w-md min-h-screen bg-gradient-to-b from-navy-dark via-navy to-navy-dark flex flex-col pb-[80px]">
-        <header className="sticky top-0 z-40 px-5 pt-5 pb-3 flex items-center justify-between glass-bottom border-b border-gold/10">
+      <div className="relative w-full max-w-md lg:max-w-6xl min-h-screen bg-gradient-to-b from-navy-dark via-navy to-navy-dark flex flex-col pb-[80px] lg:pb-10">
+        <header className="sticky top-0 z-40 px-5 lg:px-8 pt-5 pb-3 flex items-center justify-between glass-bottom border-b border-gold/10">
           <div className="flex items-center gap-2">
             <Sparkles size={18} strokeWidth={1.5} className="text-gold" />
-            <h1 className="font-serif text-lg tracking-wide text-foreground">Teologia <span className="italic text-gold">Viva</span></h1>
+            <h1 className="font-serif text-lg lg:text-xl tracking-wide text-foreground">Teologia <span className="italic text-gold">Viva</span></h1>
           </div>
           <div className="flex items-center gap-2">
             {plan === 'trial' && (
@@ -46,7 +46,7 @@ export default function Layout() {
         </header>
 
         <main
-          className="flex-1 px-5 py-5"
+          className="flex-1 px-5 py-5 lg:px-8 lg:py-8"
           style={{ contain: 'layout paint' }}
         >
           <Outlet />

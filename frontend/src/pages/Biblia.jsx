@@ -83,6 +83,22 @@ export default function Biblia() {
     return () => mq.removeEventListener?.('change', handler);
   }, []);
 
+  // Breakpoint desktop largo (Tailwind `lg` = 1024px). No desktop, o painel de estudo
+  // vira uma coluna lateral sticky em vez do Drawer Vaul — evita duplicação de UI.
+  const [isDesktopWide, setIsDesktopWide] = useState(() => {
+    try {
+      return typeof window !== 'undefined'
+        && window.matchMedia('(min-width: 1024px)').matches;
+    } catch { return false; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handler = (e) => setIsDesktopWide(e.matches);
+    mq.addEventListener?.('change', handler);
+    return () => mq.removeEventListener?.('change', handler);
+  }, []);
+
   // Quando o modal/drawer abre no mobile, suspende interações da lista por 1 segundo.
   const [suspendList, setSuspendList] = useState(false);
 
@@ -490,6 +506,182 @@ export default function Biblia() {
     return `${book?.nome} ${chapter}:${parts.join(', ')}`;
   }, [selectedNumbers, drawerNumbers, drawerOpen, book, chapter]);
 
+  // Painel de estudo — extraído como função para ser reutilizado pelo
+  // Modal Fullscreen mobile, pelo Drawer Vaul (desktop estreito) E pela
+  // Sidebar desktop lg+. Evita duplicação de código.
+  const renderStudyBody = () => (
+          <div
+            key={`study-${drawerKey}`}
+            className="overflow-y-auto px-5 py-4 space-y-5"
+            style={{ paddingBottom: '120px' }}
+          >
+            {/* Destacar */}
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
+                <Highlighter size={12} /> Destacar {drawerVerses.length > 1 ? `(${drawerVerses.length})` : ''}
+              </p>
+              <div className="flex gap-2">
+                {Object.entries(COLOR_MAP).map(([key, c]) => {
+                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.color === key);
+                  return (
+                    <button
+                      key={key}
+                      data-testid={`highlight-${key}`}
+                      onClick={() => handleHighlight(key)}
+                      className={`flex-1 h-10 rounded-lg border-2 active:scale-95 ${
+                        allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
+                      }`}
+                      style={{
+                        background: c.bg,
+                        borderColor: allHave ? c.ring : 'transparent',
+                        ...(allHave && { '--tw-ring-color': c.ring }),
+                      }}
+                      aria-label={c.label}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Favoritos */}
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
+                <Bookmark size={12} /> Favoritar em
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ key: 'promessas', label: 'Promessas' }, { key: 'estudos', label: 'Estudos' }].map((f) => {
+                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.favorito_lista === f.key);
+                  return (
+                    <button
+                      key={f.key}
+                      data-testid={`favorito-${f.key}`}
+                      onClick={() => handleFavorito(f.key)}
+                      className={`h-10 rounded-lg border text-sm font-sans tracking-wide active:scale-[0.98] ${
+                        allHave ? 'bg-gold text-navy-dark border-gold font-semibold' : 'border-gold/30 text-foreground/85 hover:border-gold/60'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Observação — somente com seleção única */}
+            {isSingleDrawer ? (
+              <section>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Observação pessoal</p>
+                <Textarea
+                  data-testid="verse-obs-input"
+                  value={draftObs}
+                  onChange={(e) => setDraftObs(e.target.value)}
+                  rows={4}
+                  placeholder="Escreva sua reflexão sobre este versículo…"
+                  className="bg-navy-light/40 border-gold/20 text-foreground resize-none"
+                />
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    data-testid="btn-salvar-obs"
+                    onClick={handleSaveObs}
+                    disabled={savingObs || draftObs === (singleNote?.observacao || '')}
+                    className="flex-1 bg-gold text-navy-dark hover:bg-gold-soft"
+                  >
+                    {savingObs ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Save size={14} className="mr-2" />}
+                    Salvar
+                  </Button>
+                  {singleNote?.observacao ? (
+                    <Button
+                      data-testid="btn-excluir-obs"
+                      onClick={async () => {
+                        setDraftObs('');
+                        await persistOne(drawerVerses[0], { observacao: null });
+                        setNotes((m) => {
+                          const next = { ...m };
+                          const n = drawerVerses[0].number;
+                          if (next[n]) next[n] = { ...next[n], observacao: null };
+                          return next;
+                        });
+                        toast.success('Observação removida');
+                      }}
+                      variant="outline"
+                      className="border-destructive/40 text-destructive-foreground hover:bg-destructive/20"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  ) : null}
+                </div>
+              </section>
+            ) : (
+              <section>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Observação pessoal</p>
+                <p className="text-xs text-foreground/60 font-sans italic">
+                  Observações pessoais são por versículo. Selecione apenas 1 para adicionar uma observação.
+                </p>
+              </section>
+            )}
+
+            {/* Tutor IA */}
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
+                <Sparkles size={12} /> Tutor IA
+              </p>
+              <Button
+                data-testid="btn-explicar-ia"
+                onClick={() => runAIExplain(drawerVerses)}
+                disabled={explaining}
+                className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
+              >
+                {explaining ? (
+                  <><Loader2 size={16} className="mr-2 animate-spin" /> Refletindo…</>
+                ) : (
+                  <><Sparkles size={16} className="mr-2" /> Explicar com IA</>
+                )}
+              </Button>
+              <ErrorBoundary
+                resetKey={drawerKey}
+                onRetry={() => runAIExplain(drawerVerses)}
+              >
+                <div key={`explanation-${drawerKey}`} className="mt-3">
+                  <VerseExplanation loading={explaining} text={explanation} />
+                </div>
+              </ErrorBoundary>
+            </section>
+
+            {/* Compartilhar */}
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
+                <Share2 size={12} /> Compartilhar
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  data-testid="btn-compartilhar"
+                  onClick={handleShare}
+                  disabled={sharing || drawerVerses.length === 0}
+                  className="bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
+                >
+                  {sharing ? (
+                    <><Loader2 size={16} className="mr-2 animate-spin" /> …</>
+                  ) : (
+                    <><Share2 size={16} className="mr-2" /> Compartilhar</>
+                  )}
+                </Button>
+                <Button
+                  data-testid="btn-salvar-imagem"
+                  onClick={handleSaveImage}
+                  disabled={sharing || drawerVerses.length === 0}
+                  variant="outline"
+                  className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-11"
+                >
+                  <Download size={16} className="mr-2 text-gold" /> Salvar imagem
+                </Button>
+              </div>
+              <p className="text-[11px] text-foreground/55 font-sans mt-2 text-center italic">
+                Compartilhe no WhatsApp/Stories ou baixe direto na galeria.
+              </p>
+            </section>
+          </div>
+  );
+
   return (
     <div className="space-y-4 pb-2" data-testid="page-biblia">
       <section>
@@ -498,10 +690,14 @@ export default function Biblia() {
         <div className="gold-divider w-16 mt-1" />
       </section>
 
+      {/* Grid 2-col desktop: reader à esquerda, painel de estudo à direita (sticky).
+          Mobile: coluna única + Drawer/Modal (fluxo preservado). */}
+      <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-8 lg:items-start space-y-4 lg:space-y-0">
+        <div className="space-y-4 min-w-0">
       {/* Controles principais STICKY: ficam fixos no topo enquanto rola.
           Sticky relativo ao Layout, que tem header próprio em top-0. Empilhamos abaixo dele. */}
       <div
-        className="sticky z-30 -mx-5 px-5 py-3 bg-navy-dark/95 backdrop-blur-md border-b border-gold/10 space-y-2"
+        className="sticky z-30 -mx-5 px-5 lg:mx-0 lg:px-0 py-3 bg-navy-dark/95 backdrop-blur-md border-b border-gold/10 space-y-2"
         style={{ top: 0 }}
         data-testid="biblia-controls"
       >
@@ -547,10 +743,11 @@ export default function Biblia() {
       <article
         className="parchment rounded-2xl px-6 py-7 shadow-inner pb-24"
         data-testid="biblia-reader"
-        // Bíblia INERTE enquanto o drawer estiver aberto — evita novas interações que poderiam
-        // disparar mutações de DOM e causar 'Failed to execute insertBefore'.
-        style={drawerOpen ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
-        aria-hidden={drawerOpen ? 'true' : undefined}
+        // Bíblia INERTE enquanto o drawer estiver aberto NO MOBILE — evita novas interações
+        // que poderiam disparar mutações de DOM e causar 'Failed to execute insertBefore'.
+        // No desktop (lg+) a sidebar mostra o painel lado a lado; mantemos o reader interativo.
+        style={drawerOpen && !isDesktopWide ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
+        aria-hidden={drawerOpen && !isDesktopWide ? 'true' : undefined}
       >
         {loading ? (
           <div className="space-y-2">
@@ -598,6 +795,49 @@ export default function Biblia() {
           <p className="text-sepia-ink">Capítulo indisponível.</p>
         )}
       </article>
+        </div>
+
+        {/* ── DESKTOP SIDEBAR (30%): Painel de estudo sempre visível ── */}
+        <aside className="hidden lg:block">
+          <div
+            className="sticky top-24 rounded-2xl border border-gold/25 bg-navy-light/20 overflow-hidden"
+            style={{ maxHeight: 'calc(100vh - 8rem)', display: 'flex', flexDirection: 'column', contain: 'layout paint' }}
+          >
+            {drawerOpen && drawerVerses.length > 0 ? (
+              <>
+                <div className="px-5 py-3 border-b border-gold/15 shrink-0">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">Menu de estudo</p>
+                  <p className="font-serif text-lg text-gold truncate">{refLabel}</p>
+                </div>
+                <div className="px-5 py-3 max-h-[24vh] overflow-y-auto border-b border-gold/10 shrink-0">
+                  <div className="text-foreground/90 font-serif italic text-sm leading-relaxed">
+                    {drawerVerses
+                      .slice()
+                      .sort((a, b) => a.number - b.number)
+                      .map((v) => (
+                        <span key={`dv-side-${v.number}`} className="block">
+                          <span className="text-gold-muted text-xs mr-1">{v.number}</span>
+                          {v.text}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto" data-testid="study-desktop-sidebar">
+                  {renderStudyBody()}
+                </div>
+              </>
+            ) : (
+              <div className="p-8 text-center space-y-3">
+                <Sparkles size={22} className="mx-auto text-gold/70" />
+                <p className="font-serif text-lg text-foreground/85">Selecione um versículo</p>
+                <p className="text-xs text-foreground/60 font-sans">
+                  Clique em um versículo ao lado para destacar, favoritar, pedir explicação da IA ou compartilhar.
+                </p>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
 
       {/* Sheet — escolher livro */}
       <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -774,181 +1014,11 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* CONTEÚDO DE ESTUDO — renderizado em Drawer (desktop) ou Modal Fullscreen (mobile).
-          Extraído como variável JSX para evitar duplicação. */}
+      {/* CONTEÚDO DE ESTUDO — renderizado em Drawer (desktop estreito),
+          Modal Fullscreen (mobile/touch) ou Sidebar lateral (desktop lg+). */}
       {(() => {
-        const studyBody = (
-          <div
-            key={`study-${drawerKey}`}
-            className="overflow-y-auto px-5 py-4 space-y-5"
-            style={{ paddingBottom: '120px' }}
-          >
-            {/* Destacar */}
-            <section>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
-                <Highlighter size={12} /> Destacar {drawerVerses.length > 1 ? `(${drawerVerses.length})` : ''}
-              </p>
-              <div className="flex gap-2">
-                {Object.entries(COLOR_MAP).map(([key, c]) => {
-                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.color === key);
-                  return (
-                    <button
-                      key={key}
-                      data-testid={`highlight-${key}`}
-                      onClick={() => handleHighlight(key)}
-                      className={`flex-1 h-10 rounded-lg border-2 active:scale-95 ${
-                        allHave ? 'ring-2 ring-offset-2 ring-offset-navy-dark' : ''
-                      }`}
-                      style={{
-                        background: c.bg,
-                        borderColor: allHave ? c.ring : 'transparent',
-                        ...(allHave && { '--tw-ring-color': c.ring }),
-                      }}
-                      aria-label={c.label}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Favoritos */}
-            <section>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
-                <Bookmark size={12} /> Favoritar em
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {[{ key: 'promessas', label: 'Promessas' }, { key: 'estudos', label: 'Estudos' }].map((f) => {
-                  const allHave = drawerVerses.length > 0 && drawerVerses.every((v) => notes[v.number]?.favorito_lista === f.key);
-                  return (
-                    <button
-                      key={f.key}
-                      data-testid={`favorito-${f.key}`}
-                      onClick={() => handleFavorito(f.key)}
-                      className={`h-10 rounded-lg border text-sm font-sans tracking-wide active:scale-[0.98] ${
-                        allHave ? 'bg-gold text-navy-dark border-gold font-semibold' : 'border-gold/30 text-foreground/85 hover:border-gold/60'
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Observação — somente com seleção única */}
-            {isSingleDrawer ? (
-              <section>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Observação pessoal</p>
-                <Textarea
-                  data-testid="verse-obs-input"
-                  value={draftObs}
-                  onChange={(e) => setDraftObs(e.target.value)}
-                  rows={4}
-                  placeholder="Escreva sua reflexão sobre este versículo…"
-                  className="bg-navy-light/40 border-gold/20 text-foreground resize-none"
-                />
-                <div className="flex gap-2 mt-2">
-                  <Button
-                    data-testid="btn-salvar-obs"
-                    onClick={handleSaveObs}
-                    disabled={savingObs || draftObs === (singleNote?.observacao || '')}
-                    className="flex-1 bg-gold text-navy-dark hover:bg-gold-soft"
-                  >
-                    {savingObs ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Save size={14} className="mr-2" />}
-                    Salvar
-                  </Button>
-                  {singleNote?.observacao ? (
-                    <Button
-                      data-testid="btn-excluir-obs"
-                      onClick={async () => {
-                        setDraftObs('');
-                        await persistOne(drawerVerses[0], { observacao: null });
-                        setNotes((m) => {
-                          const next = { ...m };
-                          const n = drawerVerses[0].number;
-                          if (next[n]) next[n] = { ...next[n], observacao: null };
-                          return next;
-                        });
-                        toast.success('Observação removida');
-                      }}
-                      variant="outline"
-                      className="border-destructive/40 text-destructive-foreground hover:bg-destructive/20"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  ) : null}
-                </div>
-              </section>
-            ) : (
-              <section>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Observação pessoal</p>
-                <p className="text-xs text-foreground/60 font-sans italic">
-                  Observações pessoais são por versículo. Selecione apenas 1 para adicionar uma observação.
-                </p>
-              </section>
-            )}
-
-            {/* Tutor IA */}
-            <section>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
-                <Sparkles size={12} /> Tutor IA
-              </p>
-              <Button
-                data-testid="btn-explicar-ia"
-                onClick={() => runAIExplain(drawerVerses)}
-                disabled={explaining}
-                className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
-              >
-                {explaining ? (
-                  <><Loader2 size={16} className="mr-2 animate-spin" /> Refletindo…</>
-                ) : (
-                  <><Sparkles size={16} className="mr-2" /> Explicar com IA</>
-                )}
-              </Button>
-              <ErrorBoundary
-                resetKey={drawerKey}
-                onRetry={() => runAIExplain(drawerVerses)}
-              >
-                <div key={`explanation-${drawerKey}`} className="mt-3">
-                  <VerseExplanation loading={explaining} text={explanation} />
-                </div>
-              </ErrorBoundary>
-            </section>
-
-            {/* Compartilhar */}
-            <section>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
-                <Share2 size={12} /> Compartilhar
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  data-testid="btn-compartilhar"
-                  onClick={handleShare}
-                  disabled={sharing || drawerVerses.length === 0}
-                  className="bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
-                >
-                  {sharing ? (
-                    <><Loader2 size={16} className="mr-2 animate-spin" /> …</>
-                  ) : (
-                    <><Share2 size={16} className="mr-2" /> Compartilhar</>
-                  )}
-                </Button>
-                <Button
-                  data-testid="btn-salvar-imagem"
-                  onClick={handleSaveImage}
-                  disabled={sharing || drawerVerses.length === 0}
-                  variant="outline"
-                  className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-11"
-                >
-                  <Download size={16} className="mr-2 text-gold" /> Salvar imagem
-                </Button>
-              </div>
-              <p className="text-[11px] text-foreground/55 font-sans mt-2 text-center italic">
-                Compartilhe no WhatsApp/Stories ou baixe direto na galeria.
-              </p>
-            </section>
-          </div>
-        );
+        if (isDesktopWide) return null;  // lg: a sidebar acima já mostra o mesmo conteúdo
+        const studyBody = renderStudyBody();
 
         // === MOBILE: Modal fullscreen sem Vaul, sem animação de slide ===
         if (isMobile) {

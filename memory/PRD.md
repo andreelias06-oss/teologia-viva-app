@@ -47,6 +47,26 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (05/mai/2026 — Layout Responsivo Desktop)
+- [x] **Fim da largura fixa no desktop** (`Layout.jsx`):
+  - Container muda de `max-w-md` para `lg:max-w-6xl` em telas ≥1024px (Tailwind `lg`).
+  - `<main>` ganha `lg:px-8 lg:py-8` e `lg:pb-10`. Header com `lg:px-8` + `lg:text-xl`.
+  - `BottomNav` agora estica até `lg:max-w-6xl` para acompanhar o container.
+- [x] **Aula em 2 colunas (Desktop)** (`Aula.jsx`):
+  - Grid `lg:grid-cols-[1fr_360px] lg:gap-8 lg:items-start`.
+  - **Esquerda (70%)**: Leitura Bíblica + Vídeo + Texto de Apoio.
+  - **Direita (30%, sticky `top-24`)**: `<AulaNotes>` + Botão "Tutor IA" + Botão "Marcar como concluída".
+  - Mobile: layout inalterado (coluna única + CTAs sticky bottom).
+- [x] **Bíblia em 2 colunas (Desktop)** (`Biblia.jsx`):
+  - Grid `lg:grid-cols-[1fr_380px] lg:gap-8 lg:items-start`.
+  - Painel de estudo extraído em função `renderStudyBody()` reusável (Modal mobile, Drawer Vaul, Sidebar lg+).
+  - **Sidebar sticky (`top-24`, `maxHeight: calc(100vh - 8rem)`)** mostra:
+    - Empty state ("Selecione um versículo") quando nenhum versículo selecionado.
+    - Quando `drawerOpen`: ref + versículos + Destacar + Favoritar + Observação + Tutor IA + **Compartilhar/Salvar imagem (RESTAURADOS)**.
+  - Estado `isDesktopWide` (`matchMedia('(min-width: 1024px)')`) anula o Drawer Vaul em desktop largo (sem duplicação de UI).
+  - Reader não é mais escurecido (`opacity 0.6`) em desktop — apenas mobile.
+- [x] **Mobile-first preservado**: S24 Ultra mantém modal fullscreen, padding 70/120 do Tutor IA, fluxo da floating bar de seleção.
+
 ## Implementado (05/mai/2026 — Blindagem Mobile S24 Ultra)
 - [x] **Anti-crash `insertBefore` (Chrome Android)** — `lib/share.js`:
   - Substituído `toPng` + `fetch(dataUrl).blob()` por `toBlob` direto (menos passos de DOM).

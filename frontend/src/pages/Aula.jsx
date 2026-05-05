@@ -137,75 +137,117 @@ export default function Aula() {
 
       <header>
         <p className="text-[11px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Aula {aula.ordem || ''}</p>
-        <h2 className="font-serif text-3xl text-foreground mt-1" data-testid="aula-titulo">{aula.titulo}</h2>
+        <h2 className="font-serif text-3xl lg:text-4xl text-foreground mt-1" data-testid="aula-titulo">{aula.titulo}</h2>
       </header>
 
-      {aula.leitura_biblica ? (
-        <section className="rounded-2xl border border-gold/20 bg-navy-light/30 p-5">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Leitura Bíblica</p>
-          <p className="font-serif italic text-xl text-gold/95 leading-relaxed" data-testid="aula-leitura">"{aula.leitura_biblica}"</p>
-        </section>
-      ) : null}
+      {/* Grid de 2 colunas no desktop (70/30). Mobile: coluna única (fluxo original). */}
+      <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-8 lg:items-start space-y-6 lg:space-y-0">
+        {/* ── COLUNA ESQUERDA (70%): Leitura + Vídeo + Texto de Apoio ── */}
+        <div className="space-y-6 min-w-0">
+          {aula.leitura_biblica ? (
+            <section className="rounded-2xl border border-gold/20 bg-navy-light/30 p-5">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">Leitura Bíblica</p>
+              <p className="font-serif italic text-xl text-gold/95 leading-relaxed" data-testid="aula-leitura">"{aula.leitura_biblica}"</p>
+            </section>
+          ) : null}
 
-      {embed ? (
-        <section
-          key={`video-${id}`}
-          className="rounded-2xl overflow-hidden border border-gold/20 bg-black aspect-video"
-          data-testid="aula-video"
-        >
-          <iframe
-            key={embed}
-            src={embed}
-            title={aula.titulo || 'Aula'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="w-full h-full"
-          />
-        </section>
-      ) : (aula.url_video || aula.video_url) ? (
-        <section
-          key={`video-file-${id}`}
-          className="rounded-2xl overflow-hidden border border-gold/20 bg-black"
-          data-testid="aula-video"
-        >
-          <video key={aula.url_video || aula.video_url} src={aula.url_video || aula.video_url} controls className="w-full" />
-        </section>
-      ) : null}
+          {embed ? (
+            <section
+              key={`video-${id}`}
+              className="rounded-2xl overflow-hidden border border-gold/20 bg-black aspect-video"
+              data-testid="aula-video"
+            >
+              <iframe
+                key={embed}
+                src={embed}
+                title={aula.titulo || 'Aula'}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full h-full"
+              />
+            </section>
+          ) : (aula.url_video || aula.video_url) ? (
+            <section
+              key={`video-file-${id}`}
+              className="rounded-2xl overflow-hidden border border-gold/20 bg-black"
+              data-testid="aula-video"
+            >
+              <video key={aula.url_video || aula.video_url} src={aula.url_video || aula.video_url} controls className="w-full" />
+            </section>
+          ) : null}
 
-      {/* Bloco de notas — auto-save no Supabase com debounce. */}
-      {user?.id && aula?.id ? <AulaNotes aulaId={aula.id} /> : null}
+          {/* Mobile: bloco de notas inline (já vem antes do texto de apoio).
+              Desktop: movido para o sidebar → só renderiza aqui em mobile. */}
+          {user?.id && aula?.id ? (
+            <div className="lg:hidden">
+              <AulaNotes aulaId={aula.id} />
+            </div>
+          ) : null}
 
-      {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) ? (
-        <section className="space-y-3" data-testid="aula-texto-apoio">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Texto de apoio</p>
-          <article className="text-foreground/85 leading-relaxed font-sans whitespace-pre-wrap">
-            {aula.conteudo_texto || aula.texto_apoio || aula.descricao}
-          </article>
-        </section>
-      ) : null}
+          {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) ? (
+            <section className="space-y-3" data-testid="aula-texto-apoio">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Texto de apoio</p>
+              <article className="text-foreground/85 leading-relaxed font-sans whitespace-pre-wrap">
+                {aula.conteudo_texto || aula.texto_apoio || aula.descricao}
+              </article>
+            </section>
+          ) : null}
 
-      <div className="flex flex-col gap-3 sticky bottom-[80px] bg-gradient-to-t from-navy via-navy to-transparent pt-4">
-        <Button
-          data-testid="btn-tutor-ia"
-          onClick={() => setTutorOpen(true)}
-          className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-12 active:scale-[0.98]"
-        >
-          <Sparkles size={16} className="mr-2" /> Tirar dúvida com Tutor IA
-          {plan === 'free' && <span className="ml-2 text-[10px] opacity-70">(5/dia)</span>}
-        </Button>
-        <Button
-          data-testid="btn-aula-concluir"
-          onClick={markComplete}
-          disabled={completed}
-          variant="outline"
-          className="w-full border-gold/40 text-gold hover:bg-gold/10 h-11"
-        >
-          {completed ? (
-            <><Check size={16} className="mr-2" /> Aula concluída</>
-          ) : (
-            <><MessageCircleQuestion size={16} className="mr-2" /> Marcar como concluída</>
-          )}
-        </Button>
+          {/* Mobile: CTAs sticky no rodapé. Desktop: movidos para sidebar. */}
+          <div className="flex flex-col gap-3 sticky bottom-[80px] bg-gradient-to-t from-navy via-navy to-transparent pt-4 lg:hidden">
+            <Button
+              data-testid="btn-tutor-ia"
+              onClick={() => setTutorOpen(true)}
+              className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-12 active:scale-[0.98]"
+            >
+              <Sparkles size={16} className="mr-2" /> Tirar dúvida com Tutor IA
+              {plan === 'free' && <span className="ml-2 text-[10px] opacity-70">(5/dia)</span>}
+            </Button>
+            <Button
+              data-testid="btn-aula-concluir"
+              onClick={markComplete}
+              disabled={completed}
+              variant="outline"
+              className="w-full border-gold/40 text-gold hover:bg-gold/10 h-11"
+            >
+              {completed ? (
+                <><Check size={16} className="mr-2" /> Aula concluída</>
+              ) : (
+                <><MessageCircleQuestion size={16} className="mr-2" /> Marcar como concluída</>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* ── COLUNA DIREITA (30%): Notas + Tutor IA + Concluir — sticky no desktop ── */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 space-y-4" style={{ contain: 'layout paint' }}>
+            {user?.id && aula?.id ? <AulaNotes aulaId={aula.id} /> : null}
+            <div className="rounded-2xl border border-gold/25 bg-navy-light/20 p-4 space-y-3">
+              <Button
+                data-testid="btn-tutor-ia-desktop"
+                onClick={() => setTutorOpen(true)}
+                className="w-full bg-gold text-navy-dark hover:bg-gold-soft h-12 active:scale-[0.98]"
+              >
+                <Sparkles size={16} className="mr-2" /> Tutor IA
+                {plan === 'free' && <span className="ml-2 text-[10px] opacity-70">(5/dia)</span>}
+              </Button>
+              <Button
+                data-testid="btn-aula-concluir-desktop"
+                onClick={markComplete}
+                disabled={completed}
+                variant="outline"
+                className="w-full border-gold/40 text-gold hover:bg-gold/10 h-11"
+              >
+                {completed ? (
+                  <><Check size={16} className="mr-2" /> Aula concluída</>
+                ) : (
+                  <><MessageCircleQuestion size={16} className="mr-2" /> Marcar como concluída</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </aside>
       </div>
 
       <AITutorDrawer
