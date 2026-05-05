@@ -124,6 +124,12 @@ export default function Perfil() {
       toast.error('Notificações não são suportadas neste dispositivo.');
       return;
     }
+    // Se o usuário já bloqueou no passado, não conseguimos reabrir o prompt —
+    // orienta explicitamente a liberar nas configurações do Chrome.
+    if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+      toast.error('Permissão bloqueada. Abra as configurações do Chrome → Site → Notificações e permita para este site.');
+      return;
+    }
     setNotifLoading(true);
     try {
       if (next) {
@@ -150,6 +156,10 @@ export default function Perfil() {
     if (!user?.id) return;
     if (!pushSupported) {
       toast.error('Notificações não são suportadas neste dispositivo.');
+      return;
+    }
+    if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+      toast.error('Permissão bloqueada. Abra as configurações do Chrome → Site → Notificações e permita para este site.');
       return;
     }
     setMeditacaoLoading(true);

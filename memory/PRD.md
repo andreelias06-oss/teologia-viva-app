@@ -47,6 +47,24 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (05/mai/2026 — Blindagem Mobile S24 Ultra)
+- [x] **Anti-crash `insertBefore` (Chrome Android)** — `lib/share.js`:
+  - Substituído `toPng` + `fetch(dataUrl).blob()` por `toBlob` direto (menos passos de DOM).
+  - Delay de `200ms` ("respiro técnico") antes de `html-to-image` E antes do `navigator.share`.
+  - Download usa `URL.createObjectURL` + `appendChild` no `body` (nunca `insertBefore`).
+  - `Biblia.jsx` (`handleShare`, `handleSaveImage`, `handleSaveObs`): `activeElement.blur()` + `setTimeout 200ms` antes da ação pesada.
+- [x] **Tutor IA — respostas cortadas eliminadas** (`AITutorDrawer.jsx`):
+  - Mobile: header e input agora são `position:absolute` (overlays), messages scroll por baixo.
+  - `paddingTop: 70px` + `paddingBottom: 120px` na área de mensagens — texto NUNCA fica atrás do header/teclado.
+  - Auto-scroll em dois passos (imediato + `requestAnimationFrame`) após cada mensagem/loading.
+  - `contain: layout paint` no modal.
+- [x] **Anotações das Aulas — botão + toast** (`AulaNotes.jsx`):
+  - Botão dourado **"Salvar Anotação"** `#C5A059` abaixo do textarea (`data-testid="btn-salvar-anotacao"`).
+  - Durante save: label muda para "Salvando..." + spinner. Toast ✅ "Anotação salva!" no sucesso.
+  - Mantém o auto-save com debounce (1500ms) em paralelo. O manual cancela o debounce pendente para evitar double-write.
+- [x] **Perfil — notificações**: switch explica "Permissão bloqueada" quando `Notification.permission === 'denied'` (Chrome → Site → Notificações). Se `default`, o prompt nativo é acionado pelo próprio clique no switch (via `subscribePush → askPermission`).
+- [x] **Performance CSS**: `contain: layout paint` aplicado em `<main>` do Layout, modal do Tutor IA e bloco de Anotações.
+
 ## Implementado (05/mai/2026 — UX & Jornada)
 - [x] **Tutor IA — Modal Fullscreen mobile** (`AITutorDrawer.jsx`):
   - No mobile (`pointer:coarse`): renderiza `<div fullscreen>` com `height: 100dvh`, `flex column` e fundo `#001529`.

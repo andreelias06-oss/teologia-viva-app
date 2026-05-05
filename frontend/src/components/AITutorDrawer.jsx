@@ -42,8 +42,17 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
     if (open) setMessages([]);
   }, [open, contexto]);
 
+  // Auto-scroll: sempre que chegar nova mensagem (user ou IA) ou loading mudar.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 99999, behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (!el) return;
+    // Dois passos: imediato + rAF — garante que o scroll siga o layout final
+    // mesmo depois que o React pintar a nova bolha de mensagem.
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    const raf = requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [messages, loading]);
 
   const send = async () => {
@@ -76,9 +85,21 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
   const messagesArea = (
     <div
       ref={scrollRef}
-      className="overflow-y-auto space-y-3 px-5 py-4"
+      className="overflow-y-auto space-y-3 px-5"
       data-testid="ai-tutor-messages"
-      style={isMobile ? { flex: 1, minHeight: 0 } : { maxHeight: '55vh' }}
+      style={
+        isMobile
+          ? {
+              flex: 1,
+              minHeight: 0,
+              // Padding extra pra que o texto NUNCA fique escondido atrás do header
+              // fixo nem da caixa de digitação do Android (S24 Ultra).
+              paddingTop: '70px',
+              paddingBottom: '120px',
+              contain: 'layout paint',
+            }
+          : { maxHeight: '55vh', paddingTop: '16px', paddingBottom: '16px' }
+      }
     >
       {messages.length === 0 && (
         <div className="text-foreground/50 text-sm font-sans italic text-center py-8">
@@ -135,7 +156,10 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
     </div>
   );
 
-  // ─── Mobile: Modal Fullscreen com header fixo + input fixo + scroll independente ───
+  // ─── Mobile: Modal Fullscreen com header fixo ABSOLUTO + input fixo ABSOLUTO ───
+  // Header e input são overlays posicionados — o scroll da lista rola POR BAIXO deles.
+  // Padding no messagesArea (70 top / 120 bottom) garante que o conteúdo nunca
+  // fique escondido atrás das barras, mesmo com o teclado Android aberto.
   if (isMobile) {
     if (!open) return null;
     return (
@@ -151,12 +175,21 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
           display: 'flex',
           flexDirection: 'column',
           height: '100dvh',
+          contain: 'layout paint',
         }}
       >
-        {/* Header fixo */}
+        {/* Header — absoluto no topo */}
         <div
-          className="flex items-center justify-between px-5 py-3 border-b border-gold/15 shrink-0"
-          style={{ background: '#001529' }}
+          className="flex items-center justify-between px-5 py-3 border-b border-gold/15"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 2,
+            background: '#001529',
+            minHeight: '62px',
+          }}
         >
           <div className="flex-1 min-w-0">
             <p className="font-serif text-xl text-gold flex items-center gap-2 truncate">
@@ -176,11 +209,22 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
             <X size={20} />
           </button>
         </div>
-        {/* Mensagens — flex:1 e scroll próprio */}
+
+        {/* Mensagens — flex:1, scroll próprio, padding grande pra escapar dos overlays */}
         {messagesArea}
-        {/* Input bar fixo no fundo. Em Android, quando o teclado abre, a janela visual encolhe e
-            como usamos 100dvh + flex column, o input "sobe junto" e o scroll segue o último msg. */}
-        {inputBar}
+
+        {/* Input — absoluto no rodapé */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 2,
+          }}
+        >
+          {inputBar}
+        </div>
       </div>
     );
   }

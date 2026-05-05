@@ -112,7 +112,12 @@ export default function Biblia() {
     if (!drawerVerses || drawerVerses.length === 0) return;
     setSharing(true);
     try {
-      await new Promise((r) => setTimeout(r, 100));
+      // Respiro técnico: evita 'corrida de processamento' do Chrome Android
+      // (insertBefore crash quando state/DOM ainda está estabilizando).
+      if (typeof document !== 'undefined' && document.activeElement?.blur) {
+        try { document.activeElement.blur(); } catch { /* ignore */ }
+      }
+      await new Promise((r) => setTimeout(r, 200));
       const res = await shareVerseCard(shareCardRef.current, {
         reference: refLabel,
         title: 'Teologia Viva',
@@ -131,7 +136,10 @@ export default function Biblia() {
     if (!drawerVerses || drawerVerses.length === 0) return;
     setSharing(true);
     try {
-      await new Promise((r) => setTimeout(r, 100));
+      if (typeof document !== 'undefined' && document.activeElement?.blur) {
+        try { document.activeElement.blur(); } catch { /* ignore */ }
+      }
+      await new Promise((r) => setTimeout(r, 200));
       await saveVerseCard(shareCardRef.current, { reference: refLabel });
       toast.success('Imagem salva na galeria');
     } catch (e) {
@@ -311,6 +319,12 @@ export default function Biblia() {
     const verse = drawerVerses[0];
     setSavingObs(true);
     try {
+      // Respiro técnico (Chrome Android) — deixa o teclado/reflow se estabilizar
+      // antes do UPDATE do Supabase e do subsequente re-render da lista.
+      if (typeof document !== 'undefined' && document.activeElement?.blur) {
+        try { document.activeElement.blur(); } catch { /* ignore */ }
+      }
+      await new Promise((r) => setTimeout(r, 200));
       const row = await persistOne(verse, { observacao: draftObs.trim() || null });
       setNotes((m) => {
         const next = { ...m };
