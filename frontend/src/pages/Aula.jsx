@@ -5,6 +5,7 @@ import { ArrowLeft, MessageCircleQuestion, Sparkles, Lock, Check } from 'lucide-
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import AITutorDrawer from '../components/AITutorDrawer';
+import AulaNotes from '../components/AulaNotes';
 import UpgradeModal from '../components/UpgradeModal';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessLesson, effectivePlan } from '../lib/plan';
@@ -170,6 +171,9 @@ export default function Aula() {
           <video key={aula.url_video || aula.video_url} src={aula.url_video || aula.video_url} controls className="w-full" />
         </section>
       ) : null}
+
+      {/* Bloco de notas — auto-save no Supabase com debounce. */}
+      {user?.id && aula?.id ? <AulaNotes aulaId={aula.id} /> : null}
 
       {(aula.conteudo_texto || aula.texto_apoio || aula.descricao) ? (
         <section className="space-y-3" data-testid="aula-texto-apoio">

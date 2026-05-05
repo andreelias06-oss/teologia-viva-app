@@ -7,7 +7,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Skeleton } from '../components/ui/skeleton';
 import {
   Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen,
-  Bookmark, Highlighter, Save, Trash2, X, FileText, Type, Share2,
+  Bookmark, Highlighter, Save, Trash2, X, FileText, Type, Share2, Download,
 } from 'lucide-react';
 import { callCleverTask } from '../lib/ai';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,7 +16,7 @@ import { loadChapterNotes, upsertVerseNote, COLOR_MAP } from '../lib/bibleNotes'
 import VerseExplanation from '../components/VerseExplanation';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ShareVerseCard from '../components/ShareVerseCard';
-import { shareVerseCard } from '../lib/share';
+import { shareVerseCard, saveVerseCard } from '../lib/share';
 import { toast } from 'sonner';
 
 const FONT_SIZES = [
@@ -112,7 +112,6 @@ export default function Biblia() {
     if (!drawerVerses || drawerVerses.length === 0) return;
     setSharing(true);
     try {
-      // pequeno delay para garantir que o card está renderizado
       await new Promise((r) => setTimeout(r, 100));
       const res = await shareVerseCard(shareCardRef.current, {
         reference: refLabel,
@@ -123,6 +122,20 @@ export default function Biblia() {
       else if (res.method === 'share') toast.success('Compartilhado!');
     } catch (e) {
       toast.error(e?.message || 'Falha ao compartilhar');
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleSaveImage = async () => {
+    if (!drawerVerses || drawerVerses.length === 0) return;
+    setSharing(true);
+    try {
+      await new Promise((r) => setTimeout(r, 100));
+      await saveVerseCard(shareCardRef.current, { reference: refLabel });
+      toast.success('Imagem salva na galeria');
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao salvar imagem');
     } finally {
       setSharing(false);
     }
@@ -893,21 +906,31 @@ export default function Biblia() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
                 <Share2 size={12} /> Compartilhar
               </p>
-              <Button
-                data-testid="btn-compartilhar"
-                onClick={handleShare}
-                disabled={sharing || drawerVerses.length === 0}
-                variant="outline"
-                className="w-full border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-11"
-              >
-                {sharing ? (
-                  <><Loader2 size={16} className="mr-2 animate-spin" /> Gerando imagem…</>
-                ) : (
-                  <><Share2 size={16} className="mr-2 text-gold" /> Compartilhar versículo</>
-                )}
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  data-testid="btn-compartilhar"
+                  onClick={handleShare}
+                  disabled={sharing || drawerVerses.length === 0}
+                  className="bg-gold text-navy-dark hover:bg-gold-soft h-11 active:scale-[0.98]"
+                >
+                  {sharing ? (
+                    <><Loader2 size={16} className="mr-2 animate-spin" /> …</>
+                  ) : (
+                    <><Share2 size={16} className="mr-2" /> Compartilhar</>
+                  )}
+                </Button>
+                <Button
+                  data-testid="btn-salvar-imagem"
+                  onClick={handleSaveImage}
+                  disabled={sharing || drawerVerses.length === 0}
+                  variant="outline"
+                  className="border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-11"
+                >
+                  <Download size={16} className="mr-2 text-gold" /> Salvar imagem
+                </Button>
+              </div>
               <p className="text-[11px] text-foreground/55 font-sans mt-2 text-center italic">
-                Gera uma imagem elegante para WhatsApp, Stories e mais.
+                Compartilhe no WhatsApp/Stories ou baixe direto na galeria.
               </p>
             </section>
           </div>

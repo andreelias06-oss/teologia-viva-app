@@ -47,8 +47,28 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (05/mai/2026 — UX & Jornada)
+- [x] **Tutor IA — Modal Fullscreen mobile** (`AITutorDrawer.jsx`):
+  - No mobile (`pointer:coarse`): renderiza `<div fullscreen>` com `height: 100dvh`, `flex column` e fundo `#001529`.
+  - Header fixo no topo (título + descrição + botão X), input fixo no rodapé, mensagens em scroll independente (`flex:1; minHeight:0`).
+  - Quando o teclado Android abre, o `100dvh` encolhe e o input "sobe junto" — histórico continua visível.
+  - Desktop mantém o Drawer Vaul tradicional.
+- [x] **Bloco de Notas nas Aulas** (`AulaNotes.jsx`):
+  - Tabela `anotacoes_aulas (user_id, aula_id, conteudo, updated_at)` com PK composto + RLS por usuário.
+  - Auto-save com debounce de 1500ms (upsert no Supabase) — indicadores "Salvando…" / "Salvo" no header do bloco.
+  - Estilo navy/dourado consistente, posicionado abaixo do vídeo na `Aula.jsx`.
+- [x] **Página `/jornada` — Minha Jornada** (`Jornada.jsx`):
+  - Tabs: **Destaques** (lê `anotacoes_biblia` filtrando por color/favorito_lista/observacao com badge da cor + bookmark) e **Anotações** (lê `anotacoes_aulas` com join para curso/aula).
+  - Empty states com CTA contextual (Ir para Bíblia / Ir para Academia).
+  - Acessível pelo Perfil → "Minha Jornada" + rota `/jornada` no App.js.
+- [x] **Salvar imagem do versículo**:
+  - `lib/share.js` adicionou `saveVerseCard()` separada de `shareVerseCard()`.
+  - Botões pareados no Menu de Estudo: "Compartilhar" (dourado) + "Salvar imagem" (outline) em grid 2 colunas.
+
 ## Implementado (05/mai/2026)
 - [x] **Compartilhar versículo (P0)**:
+
+
   - Componente `<ShareVerseCard>` (1080×1920, navy/dourado, ornamento de cantos, branding "Teologia Viva")
   - `lib/share.js` com `shareVerseCard()` — usa `html-to-image` (`toPng`) → `File` → `navigator.share({ files })` (Android/iOS modernos) → fallback download.
   - Botão "Compartilhar versículo" (`data-testid="btn-compartilhar"`) no Menu de Estudo da Bíblia (mobile e desktop).

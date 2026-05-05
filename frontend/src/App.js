@@ -12,6 +12,7 @@ import Biblia from './pages/Biblia';
 import Comunidade from './pages/Comunidade';
 import Eventos from './pages/Eventos';
 import Anotacoes from './pages/Anotacoes';
+import Jornada from './pages/Jornada';
 import Perfil from './pages/Perfil';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDevocionais from './pages/admin/AdminDevocionais';
@@ -69,6 +70,7 @@ function App() {
               <Route path="/comunidade" element={<Comunidade />} />
               <Route path="/eventos" element={<Eventos />} />
               <Route path="/anotacoes" element={<Anotacoes />} />
+              <Route path="/jornada" element={<Jornada />} />
               <Route path="/perfil" element={<Perfil />} />
             </Route>
             <Route

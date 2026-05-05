@@ -1,30 +1,29 @@
 // Helper para compartilhar versículos como imagem (Web Share API + fallback download).
 import { toPng } from 'html-to-image';
 
-/**
- * Gera o PNG do card e tenta compartilhar via navigator.share.
- * Fallback: faz download do PNG.
- *
- * @param {HTMLElement} cardEl  elemento raiz do <ShareVerseCard /> renderizado off-screen
- * @param {Object} opts
- *   @param {string} opts.reference  ex: "João 3:16"
- *   @param {string} opts.title      ex: "Teologia Viva"
- *   @param {string} opts.text       texto adicional para o share sheet
- */
-export async function shareVerseCard(cardEl, opts = {}) {
+async function generatePng(cardEl) {
   if (!cardEl) throw new Error('Card não encontrado');
-  const dataUrl = await toPng(cardEl, {
+  return await toPng(cardEl, {
     cacheBust: true,
-    pixelRatio: 1,  // o card já é 1080×1920
+    pixelRatio: 1,
     backgroundColor: '#061226',
   });
+}
 
-  // Converte dataUrl → File para Web Share API.
+function buildFileName(reference) {
+  const slug = (reference || 'versiculo').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  return `teologia-viva-${slug}.png`;
+}
+
+/**
+ * Compartilha via Web Share API (mobile) OU baixa o PNG (fallback desktop).
+ */
+export async function shareVerseCard(cardEl, opts = {}) {
+  const dataUrl = await generatePng(cardEl);
   const blob = await (await fetch(dataUrl)).blob();
-  const fileName = `teologia-viva-${(opts.reference || 'versiculo').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
+  const fileName = buildFileName(opts.reference);
   const file = new File([blob], fileName, { type: 'image/png' });
 
-  // Tenta navigator.share com arquivo (Android/iOS modernos).
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
@@ -34,17 +33,31 @@ export async function shareVerseCard(cardEl, opts = {}) {
       });
       return { method: 'share' };
     } catch (e) {
-      // Usuário cancelou ou navegador rejeitou — segue para fallback.
       if (e?.name === 'AbortError') return { method: 'cancelled' };
     }
   }
 
-  // Fallback: download do PNG.
+  // Fallback: download.
+  triggerDownload(dataUrl, fileName);
+  return { method: 'download' };
+}
+
+/**
+ * Salva a imagem direto na galeria/Downloads do dispositivo.
+ */
+export async function saveVerseCard(cardEl, opts = {}) {
+  const dataUrl = await generatePng(cardEl);
+  const fileName = buildFileName(opts.reference);
+  triggerDownload(dataUrl, fileName);
+  return { method: 'download' };
+}
+
+function triggerDownload(dataUrl, fileName) {
   const a = document.createElement('a');
   a.href = dataUrl;
   a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  return { method: 'download' };
 }
+

@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
 import { Switch } from '../components/ui/switch';
 import { effectivePlan, trialDaysLeft, getAICallsToday, PLAN } from '../lib/plan';
-import { LogOut, NotebookPen, Sparkles, Crown, Shield, Bell } from 'lucide-react';
+import { LogOut, NotebookPen, Sparkles, Crown, Shield, Bell, Highlighter } from 'lucide-react';
 import StreakBadge from '../components/StreakBadge';
 import UpgradeModal from '../components/UpgradeModal';
 import { isAdmin } from '../lib/admin';
@@ -295,6 +295,14 @@ export default function Perfil() {
       </div>
 
       <div className="grid grid-cols-1 gap-3">
+        <Button
+          data-testid="btn-jornada"
+          variant="outline"
+          onClick={() => navigate('/jornada')}
+          className="border-gold/30 text-foreground hover:bg-gold/10 h-12 justify-start"
+        >
+          <Highlighter size={16} className="mr-2 text-gold" /> Minha Jornada
+        </Button>
         <Button
           data-testid="btn-anotacoes"
           variant="outline"
