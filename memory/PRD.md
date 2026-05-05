@@ -47,6 +47,21 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Hotfix (05/mai/2026 — Selection Bar Invisível + Anti-Crash)
+- [x] **BUG: `contain: layout paint` no `<main>` quebrou `position: fixed`**: a barra de seleção da Bíblia estava invisível porque `<main>` virava um novo *containing block* para descendentes fixos. Removido `contain` do `<main>` em `Layout.jsx`. Mantido apenas em containers sem filhos fixed (AulaNotes, sidebar da Bíblia, modal do Tutor IA).
+- [x] **Barra de seleção SEMPRE MONTADA** (`Biblia.jsx`): substituído `selectedVerses.length > 0 ? (...) : null` por `visibility/opacity/pointerEvents` toggles. Evita mount/unmount cycles que disparavam `insertBefore` no Chrome Android.
+- [x] **3 novos botões na barra de seleção** (linha inferior, sempre visíveis):
+  - `selection-share` (Compartilhar) — reutiliza `handleShare`.
+  - `selection-save-image` (Salvar) — reutiliza `handleSaveImage`.
+  - `selection-obs` (Observação) — abre o Menu de Estudo.
+  - Card `<ShareVerseCard>` agora usa `getCardVerses()` = `drawerVerses || selectedVerses`, permitindo compartilhar direto da seleção sem abrir o Menu.
+- [x] **Tutor IA — paddingBottom:120px em TODOS os breakpoints** (`AITutorDrawer.jsx`): desktop antes tinha `paddingBottom:16px`, agora recebe os mesmos 120px do mobile para que a última resposta fique acima da barra de input.
+- [x] **Modais sempre montados no DOM** (visibility toggle):
+  - `study-mobile-modal` (Biblia): troca de `if(!drawerOpen) return null` para `visibility:hidden/visible`.
+  - `ai-tutor-mobile-modal` (AITutorDrawer mobile): idem.
+  - Previne React mount/unmount → elimina causa raiz do `insertBefore` crash em Chrome Android.
+- [x] **Validado por testing agent (iteration_9)**: 5/5 PASS em desktop 1440x900 E mobile 412x915. Zero `insertBefore` crashes. paddingBottom 120px confirmado.
+
 ## Implementado (05/mai/2026 — Layout Responsivo Desktop)
 - [x] **Fim da largura fixa no desktop** (`Layout.jsx`):
   - Container muda de `max-w-md` para `lg:max-w-6xl` em telas ≥1024px (Tailwind `lg`).
