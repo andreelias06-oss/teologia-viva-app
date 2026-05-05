@@ -45,10 +45,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main
-          className="flex-1 px-5 py-5 lg:px-8 lg:py-8"
-          style={{ contain: 'layout paint' }}
-        >
+        <main className="flex-1 px-5 py-5 lg:px-8 lg:py-8">
           <Outlet />
         </main>
 

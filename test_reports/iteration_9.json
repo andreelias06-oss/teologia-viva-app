@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend retest after removal of `contain: layout paint` from <main> in Layout.jsx. ALL 5 review items PASS. The position:fixed selection-bar now sits correctly at the viewport bottom on both desktop (1440x900: y=654, bottom=810) and mobile (412x915: y=669, bottom=825). All 6 selection buttons (highlight, tutor-ia, open-study, share, save-image, obs) are present and visible. selection-open-study populates the desktop sidebar with all 9 expected items including Compartilhar/Salvar imagem. AITutorDrawer messages area on /aula/64 reports paddingBottom=120px as required. No console errors and no insertBefore crashes during the entire run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile /biblia (412x915)", "issues": ["Floating selection-bar (bottom:90px from viewport) sits roughly 0-10px above the BottomNav (the visible Tutor IA / Menu / Compartilhar buttons line up with — and slightly cover — the bottom-tabs ribbon). Functionally fine but visually a little tight; consider raising the bar bottom offset on mobile (e.g. bottom:96px) so the BottomNav is cleanly visible behind it."]}
+    ]
+  },
+  "tests_executed": [
+    {"id": "T1", "name": "Desktop 1440x900 /biblia: click verse-1 → selection-bar visible at viewport bottom (~y=654)", "result": "PASS", "evidence": "rect={x:500,y:654,w:440,h:156,bottom:810}, viewport h=900, position:fixed, visibility:visible, zIndex:99999, main.contain=none"},
+    {"id": "T2", "name": "Desktop: all 6 selection buttons (highlight, tutor-ia, open-study, share, save-image, obs) present and visible/clickable", "result": "PASS"},
+    {"id": "T3", "name": "Desktop: click selection-open-study (Menu) → study-desktop-sidebar populates with all sections + Compartilhar + Salvar imagem", "result": "PASS", "evidence": "study-desktop-sidebar, highlight-yellow, favorito-promessas, favorito-estudos, verse-obs-input, btn-salvar-obs, btn-explicar-ia, btn-compartilhar, btn-salvar-imagem all present"},
+    {"id": "T4", "name": "Mobile 412x915 /biblia: click verse-1 → selection-bar visible at viewport bottom", "result": "PASS", "evidence": "rect={x:12,y:669,w:388,h:156,bottom:825}, viewport h=915, all 6 testids present and visible"},
+    {"id": "T5", "name": "Click selection-tutor-ia (on /aula/64 via btn-tutor-ia-desktop) → AITutorDrawer messages padding", "result": "PASS", "evidence": "[data-testid=ai-tutor-messages] computed paddingBottom=120px (paddingTop=16px on this desktop branch — review request 70px paddingTop only applies to mobile pointer:coarse branch which Playwright Chromium cannot trigger; not regressed)"},
+    {"id": "T6", "name": "No console errors / no insertBefore crashes during full flow", "result": "PASS", "evidence": "0 console errors, 0 insertBefore mentions across signup → /biblia desktop → open-study → tutor-ia → /aula/64 tutor → mobile /biblia"}
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Iteration_8 RCA confirmed correct: removing `style={{ contain: 'layout paint' }}` from <main> in Layout.jsx (line 48) was the right fix. The selection-bar's offsetParent is now null (i.e. the viewport) and main.contain computes as 'none'.",
+    "Biblia.jsx is still ~1187 lines. Splitting SelectionBar / StudyPanel / ShareCard into separate files remains a useful refactor (carried over from iteration_8).",
+    "isMobile detection still uses window.matchMedia('(pointer: coarse)') in Biblia.jsx and AITutorDrawer.jsx, so the mobile-only branches (study-mobile-modal, ai-tutor-mobile-modal, paddingTop:70px) cannot be exercised by automated Playwright Chromium. Combining with viewport width (e.g. (max-width:1023px)) would make these branches QA-testable.",
+    "On /biblia (desktop and mobile), the selection-tutor-ia button opens the bottom Drawer focused on AI block; it does not mount the AITutorDrawer component (AITutorDrawer is only on /aula/{id}). That matches the iteration_8 note and is not a bug, just a clarification for the review request wording."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100% (6/6 retest items PASS)"},
+  "test_credentials": "Fresh signup via UI: test+<timestamp>@teologia.test / TestPass123 (Supabase auto-confirms on this project, session is created immediately and /biblia is reachable).",
+  "seed_data_creation": "None — used existing João 3 chapter and Aula 64 (Aula 01: Introdução à Hermenêutica).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The contain-on-main regression is fixed. <main> in Layout.jsx now has no `contain` style; selection-bar (position:fixed; bottom:90px) is positioned relative to the viewport on both desktop and mobile. All 6 selection-* testids resolve and are clickable. study-desktop-sidebar populates correctly after Menu click. AITutorDrawer paddingBottom=120px confirmed. No console errors or insertBefore crashes. Remaining open items from iteration_8 that this iteration could not exercise (mobile-only pointer:coarse branches: study-mobile-modal, ai-tutor-mobile-modal, paddingTop:70px) are unchanged and still require manual touch-emulation testing or a gating change to a width-based media query.",
+  "rca of the issue": "Resolved. Iteration_8 root cause: `style={{ contain: 'layout paint' }}` on <main> made <main> a containing block for position:fixed descendants (W3C CSS Containment), pushing the selection-bar ~3500px below the viewport. Fix in iteration_9: that style was removed from <main> in /app/frontend/src/components/Layout.jsx. Verified at runtime: getComputedStyle(main).contain === 'none', selection-bar offsetParent === null, getBoundingClientRect.y is ~654 on 1440x900 and ~669 on 412x915 — both inside the visible viewport. Bar is now visible and usable to end users."
+}
