@@ -124,8 +124,13 @@ export default function Biblia() {
   const shareCardRef = useRef(null);
   const [sharing, setSharing] = useState(false);
 
+  // Fonte de versículos para o card de compartilhamento:
+  // prioriza drawerVerses (painel de estudo aberto), senão selectedVerses da floating bar.
+  const getCardVerses = () => (drawerVerses && drawerVerses.length > 0 ? drawerVerses : selectedVerses);
+
   const handleShare = async () => {
-    if (!drawerVerses || drawerVerses.length === 0) return;
+    const verses = getCardVerses();
+    if (!verses || verses.length === 0) return;
     setSharing(true);
     try {
       // Respiro técnico: evita 'corrida de processamento' do Chrome Android
@@ -149,7 +154,8 @@ export default function Biblia() {
   };
 
   const handleSaveImage = async () => {
-    if (!drawerVerses || drawerVerses.length === 0) return;
+    const verses = getCardVerses();
+    if (!verses || verses.length === 0) return;
     setSharing(true);
     try {
       if (typeof document !== 'undefined' && document.activeElement?.blur) {
@@ -164,6 +170,10 @@ export default function Biblia() {
       setSharing(false);
     }
   };
+
+  // Aliases — mesmos handlers, chamados direto pela barra de seleção (quick actions).
+  const handleShareFromSelection = handleShare;
+  const handleSaveFromSelection = handleSaveImage;
 
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
@@ -889,83 +899,127 @@ export default function Biblia() {
         </SheetContent>
       </Sheet>
 
-      {/* Barra de ferramentas — INLINE (sem Portal). Fundo navy sólido + borda dourada.
-          position:fixed bottom:90px z-index:99999. Sem animações. */}
-      {selectedVerses.length > 0 ? (
-        <div
-          data-testid="selection-bar"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            bottom: '90px',
-            width: 'calc(100% - 24px)',
-            maxWidth: '420px',
-            background: '#0B1A2C',
-            border: '2px solid rgba(212, 175, 55, 0.55)',
-            borderRadius: '14px',
-            boxShadow: '0 14px 32px rgba(0,0,0,0.7)',
-            padding: '10px',
-            zIndex: 99999,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <button
-              onClick={clearSelection}
-              data-testid="selection-clear"
-              aria-label="Limpar seleção"
-              style={{ color: '#E5E7EB', padding: '4px', background: 'transparent', border: 0 }}
+      {/* Barra de ferramentas — SEMPRE MONTADA no DOM. Usa visibility+pointerEvents
+          para não sofrer mount/unmount (evita `insertBefore` crash no Chrome Android). */}
+      <div
+        data-testid="selection-bar"
+        style={{
+          position: 'fixed',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          bottom: '90px',
+          width: 'calc(100% - 24px)',
+          maxWidth: '440px',
+          background: '#0B1A2C',
+          border: '2px solid rgba(212, 175, 55, 0.55)',
+          borderRadius: '14px',
+          boxShadow: '0 14px 32px rgba(0,0,0,0.7)',
+          padding: '10px',
+          zIndex: 99999,
+          visibility: selectedVerses.length > 0 ? 'visible' : 'hidden',
+          opacity: selectedVerses.length > 0 ? 1 : 0,
+          pointerEvents: selectedVerses.length > 0 ? 'auto' : 'none',
+          transition: 'opacity 120ms ease',
+        }}
+        aria-hidden={selectedVerses.length === 0}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <button
+            onClick={clearSelection}
+            data-testid="selection-clear"
+            aria-label="Limpar seleção"
+            style={{ color: '#E5E7EB', padding: '4px', background: 'transparent', border: 0 }}
+          >
+            <X size={20} />
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#D4AF37', fontWeight: 600 }}>
+              {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
+            </p>
+            <p
+              style={{ fontSize: '14px', color: '#F5F1E6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'serif' }}
             >
-              <X size={20} />
-            </button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#D4AF37', fontWeight: 600 }}>
-                {selectedVerses.length} versículo{selectedVerses.length > 1 ? 's' : ''}
-              </p>
-              <p
-                style={{ fontSize: '14px', color: '#F5F1E6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'serif' }}
-              >
-                {refLabel}
-              </p>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-            <button
-              data-testid="selection-highlight"
-              onClick={() => setHighlightSheetOpen(true)}
-              style={{
-                background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
-                borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-              }}
-            >
-              <Highlighter size={14} color="#D4AF37" /> Destacar
-            </button>
-            <button
-              data-testid="selection-tutor-ia"
-              onClick={openTutorIA}
-              style={{
-                background: '#D4AF37', color: '#0B1A2C', border: 0, borderRadius: '8px',
-                height: '40px', fontSize: '12px', fontWeight: 700, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', gap: '4px',
-              }}
-            >
-              <Sparkles size={14} /> Tutor IA
-            </button>
-            <button
-              data-testid="selection-open-study"
-              onClick={openStudyMenu}
-              style={{
-                background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
-                borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-              }}
-            >
-              <FileText size={14} color="#D4AF37" /> Menu
-            </button>
+              {refLabel}
+            </p>
           </div>
         </div>
-      ) : null}
+        {/* Linha 1: Destacar / Tutor IA / Menu */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '8px' }}>
+          <button
+            data-testid="selection-highlight"
+            onClick={() => setHighlightSheetOpen(true)}
+            style={{
+              background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+            }}
+          >
+            <Highlighter size={14} color="#D4AF37" /> Destacar
+          </button>
+          <button
+            data-testid="selection-tutor-ia"
+            onClick={openTutorIA}
+            style={{
+              background: '#D4AF37', color: '#0B1A2C', border: 0, borderRadius: '8px',
+              height: '40px', fontSize: '12px', fontWeight: 700, display: 'flex',
+              alignItems: 'center', justifyContent: 'center', gap: '4px',
+            }}
+          >
+            <Sparkles size={14} /> Tutor IA
+          </button>
+          <button
+            data-testid="selection-open-study"
+            onClick={openStudyMenu}
+            style={{
+              background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: '8px', height: '40px', fontSize: '12px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+            }}
+          >
+            <FileText size={14} color="#D4AF37" /> Menu
+          </button>
+        </div>
+        {/* Linha 2: Compartilhar / Salvar Imagem / Observação — SEMPRE visíveis */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+          <button
+            data-testid="selection-share"
+            onClick={handleShareFromSelection}
+            disabled={sharing}
+            style={{
+              background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: '8px', height: '40px', fontSize: '11px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+              opacity: sharing ? 0.5 : 1,
+            }}
+          >
+            <Share2 size={14} color="#D4AF37" /> Compartilhar
+          </button>
+          <button
+            data-testid="selection-save-image"
+            onClick={handleSaveFromSelection}
+            disabled={sharing}
+            style={{
+              background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: '8px', height: '40px', fontSize: '11px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+              opacity: sharing ? 0.5 : 1,
+            }}
+          >
+            <Download size={14} color="#D4AF37" /> Salvar
+          </button>
+          <button
+            data-testid="selection-obs"
+            onClick={openStudyMenu}
+            style={{
+              background: 'transparent', color: '#F5F1E6', border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: '8px', height: '40px', fontSize: '11px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+            }}
+          >
+            <Save size={14} color="#D4AF37" /> Observação
+          </button>
+        </div>
+      </div>
 
       {/* Sheet rápido de cores para "Destacar" — usa drawerVerses se drawer aberto, senão selectedVerses */}
       <Sheet open={highlightSheetOpen} onOpenChange={setHighlightSheetOpen}>
@@ -1020,15 +1074,16 @@ export default function Biblia() {
         if (isDesktopWide) return null;  // lg: a sidebar acima já mostra o mesmo conteúdo
         const studyBody = renderStudyBody();
 
-        // === MOBILE: Modal fullscreen sem Vaul, sem animação de slide ===
+        // === MOBILE: Modal fullscreen SEMPRE MONTADO (visibility toggle).
+        // Evita mount/unmount → elimina insertBefore crash no Chrome Android. ===
         if (isMobile) {
-          if (!drawerOpen) return null;
           return (
             <div
               key={`mobile-modal-${drawerKey}`}
               data-testid="study-mobile-modal"
               role="dialog"
-              aria-modal="true"
+              aria-modal={drawerOpen ? 'true' : 'false'}
+              aria-hidden={drawerOpen ? 'false' : 'true'}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -1036,6 +1091,8 @@ export default function Biblia() {
                 background: '#0B1A2C',
                 display: 'flex',
                 flexDirection: 'column',
+                visibility: drawerOpen ? 'visible' : 'hidden',
+                pointerEvents: drawerOpen ? 'auto' : 'none',
               }}
             >
               {/* Header com botão fechar */}
@@ -1118,7 +1175,7 @@ export default function Biblia() {
       >
         <div ref={shareCardRef}>
           <ShareVerseCard
-            verses={drawerVerses}
+            verses={getCardVerses()}
             reference={refLabel}
             translation={chapterData?.translation}
           />

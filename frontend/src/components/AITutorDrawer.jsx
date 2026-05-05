@@ -98,7 +98,13 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
               paddingBottom: '120px',
               contain: 'layout paint',
             }
-          : { maxHeight: '55vh', paddingTop: '16px', paddingBottom: '16px' }
+          : {
+              maxHeight: '55vh',
+              paddingTop: '16px',
+              // Desktop também recebe padding-bottom generoso para que a última
+              // mensagem sempre fique acima da barra de input.
+              paddingBottom: '120px',
+            }
       }
     >
       {messages.length === 0 && (
@@ -160,13 +166,14 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
   // Header e input são overlays posicionados — o scroll da lista rola POR BAIXO deles.
   // Padding no messagesArea (70 top / 120 bottom) garante que o conteúdo nunca
   // fique escondido atrás das barras, mesmo com o teclado Android aberto.
+  // SEMPRE MONTADO (visibility toggle) — evita mount/unmount → previne insertBefore crash.
   if (isMobile) {
-    if (!open) return null;
     return (
       <div
         data-testid="ai-tutor-mobile-modal"
         role="dialog"
-        aria-modal="true"
+        aria-modal={open ? 'true' : 'false'}
+        aria-hidden={open ? 'false' : 'true'}
         style={{
           position: 'fixed',
           inset: 0,
@@ -176,6 +183,8 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
           flexDirection: 'column',
           height: '100dvh',
           contain: 'layout paint',
+          visibility: open ? 'visible' : 'hidden',
+          pointerEvents: open ? 'auto' : 'none',
         }}
       >
         {/* Header — absoluto no topo */}

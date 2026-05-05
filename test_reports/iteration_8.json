@@ -1,0 +1,55 @@
+{
+  "summary": "Frontend regression for Teologia Viva PWA: validated desktop 1440x900 and mobile 412x915 layouts after the major refactor (2-col grid, always-mounted selection bar with 6 buttons, AITutorDrawer paddingBottom 120px, always-mounted mobile modals). 8/10 review items passed. ONE CRITICAL BUG FOUND: the floating selection-bar (and any other position:fixed inside <main>) is positioned relative to <main> instead of the viewport because Layout.jsx applies CSS `contain: layout paint` on <main>. Result: the selection-bar renders far below the viewport and is INVISIBLE to users on both desktop and mobile, even though programmatic clicks still reach it. 0 console errors, 0 insertBefore crashes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Layout.jsx <main> + Biblia.jsx selection-bar",
+        "issue": "CRITICAL: <main> in Layout.jsx has style={{ contain: 'layout paint' }}. CSS `contain: layout` makes <main> the containing block for any position:fixed descendant. The Biblia selection-bar (position:fixed; bottom:90px) is therefore positioned relative to <main> — its bounding rect was {y: 4421, bottom: 4577} on a 412x915 viewport (scrollY=0), i.e. ~3500px below the viewport. The bar is computed-visible (visibility:visible, zIndex 99999) but VISUALLY OFF-SCREEN. Same bug affects the floating bar on desktop. Reproduce: open /biblia, tap any verse → no toolbar appears at bottom of screen; programmatic click via testid still works.",
+        "selector": "[data-testid='selection-bar'] / main",
+        "priority": "HIGH"
+      },
+      {
+        "component": "AITutorDrawer.jsx (mobile aula path)",
+        "issue": "The review request specified Tutor IA messages area should have paddingTop:70px on mobile, but on /aula/64 in 412x915 viewport the messages container reports paddingTop:16px (pb is correct at 120px). May only be correct in the always-mounted mobile branch which only renders when pointer:coarse media query matches (Playwright Chromium has fine pointer, so cannot fully validate the 70px branch automatically — main agent should verify on a real touch device or via Chrome DevTools device-mode).",
+        "selector": "[data-testid='ai-tutor-messages']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    {"id": "T1", "name": "Desktop /biblia 2-col grid + container width 1152px", "result": "PASS"},
+    {"id": "T2", "name": "Desktop selection-bar always in DOM (visibility:hidden when no selection)", "result": "PASS"},
+    {"id": "T3", "name": "Desktop click verse-1 → all 6 selection buttons present (highlight, tutor-ia, open-study/Menu, share, save-image, obs)", "result": "PASS"},
+    {"id": "T4", "name": "Desktop click Menu (selection-open-study) → study-desktop-sidebar populated with highlight-yellow, favorito-promessas, favorito-estudos, verse-obs-input, btn-salvar-obs, btn-explicar-ia, btn-compartilhar, btn-salvar-imagem", "result": "PASS"},
+    {"id": "T5", "name": "Desktop /aula/64 2-col grid w/ Leitura+Vídeo on left, sticky sidebar on right (aula-notes, aula-notes-input, btn-salvar-anotacao golden #C5A059 confirmed rgb(197,160,89), btn-tutor-ia-desktop, btn-aula-concluir-desktop)", "result": "PASS"},
+    {"id": "T6", "name": "Mobile 412x915 selection-bar in DOM with all 6 testids present", "result": "PASS (logical) / FAIL (visual)", "note": "All 6 buttons exist with correct testids and visibility:visible after tap, BUT the bar is rendered ~4500px below viewport due to containing-block bug → user cannot see/use it"},
+    {"id": "T7", "name": "Mobile study-mobile-modal + ai-tutor-mobile-modal always in DOM", "result": "INCONCLUSIVE", "note": "These two only render when window.matchMedia('(pointer: coarse)') matches. Playwright headless Chrome reports pointer:fine, so the mobile branch never mounts — instead the desktop Vaul Drawer path is used. Code looks correct on inspection but cannot be exercised without touch emulation."},
+    {"id": "T8", "name": "AITutorDrawer paddingBottom 120px on Aula page", "result": "PASS (pb=120px confirmed)"},
+    {"id": "T9", "name": "AITutorDrawer paddingTop 70px on mobile aula", "result": "FAIL/INCONCLUSIVE", "note": "Reported pt=16px in 412x915 viewport — but again, the 70px value lives on the touch-only branch."},
+    {"id": "T10", "name": "No React console errors / no insertBefore crashes during full flow", "result": "PASS (0 console errors, 0 insertBefore)"}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "HIGH PRIORITY — Remove `contain: 'layout paint'` from <main> in /app/frontend/src/components/Layout.jsx OR portal the selection-bar (and any other position:fixed children) to document.body. Without this, the floating Bíblia toolbar is invisible to all users. Verify by opening /biblia on desktop & mobile, tapping a verse — the bar must appear at viewport bottom (~bottom:88-90px from window).",
+    "Verify (and fix if needed) AITutorDrawer paddingTop on mobile — review request said 70px, code path appears guarded by pointer:coarse media query so Playwright cannot test it. Recommend manual check on Chrome DevTools mobile emulation with touch ON.",
+    "Consider switching the isMobile detection in Biblia.jsx (line 72-80) and AITutorDrawer.jsx from `pointer: coarse` to `(max-width: 1023px)` (or a combination) so QA tools and narrow-window desktops also exercise the mobile branch."
+  ],
+  "critical_code_review_comments": [
+    "Layout.jsx line 50 sets `contain: layout paint` on <main>. This is the root cause of the position:fixed regression for any modal/bar mounted inside the page Outlet (selection-bar, off-screen image card, study-mobile-modal at zIndex 99998). The BottomNav escapes this because it is rendered outside <main>. Either remove `contain` or use a portal for fixed elements.",
+    "Biblia.jsx is now 1187 lines combining reader, selection-bar, two pickers, study sidebar, mobile modal and a hidden share-image card. Splitting into SelectionBar.jsx, StudyPanel.jsx, ShareCard.jsx is overdue and would simplify the recent fixed-positioning work.",
+    "isMobile detection via `window.matchMedia('(pointer: coarse)')` excludes a range of legitimate mobile contexts (touch-screen laptops show pointer:fine; desktop Chrome at narrow width never matches). Combining with viewport width is more robust and would also make automated QA reliable.",
+    "openTutorIA in Biblia.jsx uses the same Drawer as the study menu (`setDrawerOpen(true)`), it does NOT mount the AITutorDrawer component. The 6th 'selection-tutor-ia' button thus opens the Vaul Drawer with the AI block focused — the review request's 'AITutorDrawer opens' phrasing is technically inaccurate for /biblia; AITutorDrawer is only used on /aula/{id}.",
+    "The page-level data-testid coverage is excellent (all 6 selection buttons, sidebar items, aula sidebar items found by testid)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "70% (7/10 strictly passing; 1 critical bug, 2 inconclusive due to pointer-media-query gating)"},
+  "test_credentials": "Fresh signup test+<timestamp>@teologia.test / TestPass123 via Supabase signup tab",
+  "seed_data_creation": "None — used existing Bíblia João 3 chapter and Aula 64 ('Aula 01: Introdução à Hermenêutica').",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 8 confirms the layout refactor structure is correct (2-col grids, all 6 selection buttons present, correct testids in study sidebar, AulaNotes save button golden #C5A059 confirmed). The blocking issue is purely the CSS `contain: layout paint` on <main> which breaks position:fixed for the selection-bar (and any other fixed child of <main>). Fix that single line in Layout.jsx and re-test. The mobile-only modal branches (study-mobile-modal and ai-tutor-mobile-modal) cannot be triggered in default Playwright Chromium because they are gated by pointer:coarse — main agent should either change the gating to viewport-based or test manually with DevTools touch emulation. No console errors / no insertBefore crashes observed during the entire run.",
+  "rca of the issue": "Root cause: /app/frontend/src/components/Layout.jsx line 49-51 — `<main className=\"flex-1 px-5 py-5 lg:px-8 lg:py-8\" style={{ contain: 'layout paint' }}>`. The CSS `contain: layout` (and `paint`) creates a new containing block for fixed-positioned descendants per the W3C CSS Containment spec. Therefore the Biblia selection-bar (rendered as a child of <main> via the Outlet, with `position:fixed; bottom:90px`) is positioned relative to <main>'s box — not the viewport. Confirmed at runtime: bar.offsetParent === MAIN; getBoundingClientRect = {y:4421, bottom:4577} on a 412x915 viewport with scrollY=0 (so the bar lives ~3500px below the visible area). Mitigation: (a) drop the `contain` declaration on <main>, OR (b) move the selection-bar (and other fixed overlays) to a React portal mounted at document.body, OR (c) move the selection-bar render to be a sibling of <main>/<BottomNav> directly under the outer wrapper."
+}
