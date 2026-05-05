@@ -47,6 +47,20 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (05/mai/2026)
+- [x] **Compartilhar versículo (P0)**:
+  - Componente `<ShareVerseCard>` (1080×1920, navy/dourado, ornamento de cantos, branding "Teologia Viva")
+  - `lib/share.js` com `shareVerseCard()` — usa `html-to-image` (`toPng`) → `File` → `navigator.share({ files })` (Android/iOS modernos) → fallback download.
+  - Botão "Compartilhar versículo" (`data-testid="btn-compartilhar"`) no Menu de Estudo da Bíblia (mobile e desktop).
+- [x] **Stripe Checkout (Modo Teste)** — preparação completa:
+  - Tabela `payment_transactions` (user_id, session_id, amount, currency, status, payment_status, package_id) com RLS.
+  - Edge Function `stripe-create-checkout` (Deno + `npm:stripe@14.21.0`) — pacotes server-side (NUNCA aceita amount do client). Cria session, registra tx pendente.
+  - Edge Function `stripe-checkout-status` — polling idempotente. Atualiza status + ativa `profiles.plano = 'premium'` quando pago.
+  - Secret `STRIPE_API_KEY = sk_test_emergent` configurada via Management API.
+  - `lib/payments.js` com `startCheckout` e `pollSessionStatus`.
+  - `<UpgradeModal>` reformulado: card de preço "R$ 9,90/mês", botão "Quero ser Premium" → redireciona para Stripe Checkout.
+  - `Perfil.jsx` detecta `?session_id=...` no retorno e faz polling de até 60s, mostra toast e ativa Premium automaticamente.
+
 ## Implementado (04/mai/2026)
 - [x] **Bíblia consumida 100% do Supabase** — tabela `biblia` recriada com schema `(versao, abbrev, name, ordem, testamento, chapters jsonb)` e PK composto `(versao, abbrev)`. Populada com **3 versões completas** (NVI, ACF, AA — Almeida Atualizada), 66 livros cada, 198 linhas no total. RLS habilitado com policy de leitura pública.
 - [x] `lib/bible.js` totalmente refatorado: `listBooks(versao)`, `getChaptersCount(abbrev, versao)`, `fetchChapter(abbrev, chapter, versao)` — sem dependência de APIs externas. Cache em memória da lista de livros. Range explícito `0-99` para garantir os 66 livros.

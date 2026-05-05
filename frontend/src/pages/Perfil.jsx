@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
@@ -11,11 +11,13 @@ import StreakBadge from '../components/StreakBadge';
 import UpgradeModal from '../components/UpgradeModal';
 import { isAdmin } from '../lib/admin';
 import { isPushSupported, subscribePush, unsubscribePush, getCurrentSubscription } from '../lib/push';
+import { pollSessionStatus } from '../lib/payments';
 import { toast } from 'sonner';
 
 export default function Perfil() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [progressoAtual, setProgressoAtual] = useState({ curso: null, pct: 0, totalAulas: 0, doneAulas: 0 });
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -25,6 +27,31 @@ export default function Perfil() {
   const [meditacaoEnabled, setMeditacaoEnabled] = useState(false);
   const [meditacaoLoading, setMeditacaoLoading] = useState(false);
   const pushSupported = isPushSupported();
+
+  // Stripe checkout return — se houver `?session_id=...`, faz polling do status.
+  useEffect(() => {
+    const sid = searchParams.get('session_id');
+    if (!sid) return;
+    let cancelled = false;
+    (async () => {
+      toast.loading('Confirmando pagamento…', { id: 'pay-status' });
+      const res = await pollSessionStatus(sid);
+      if (cancelled) return;
+      if (res.status === 'complete' && (res.payment_status === 'paid' || !res.payment_status)) {
+        toast.success('Pagamento confirmado! Bem-vindo ao Premium 👑', { id: 'pay-status' });
+      } else if (res.status === 'expired') {
+        toast.error('Sessão de pagamento expirou', { id: 'pay-status' });
+      } else {
+        toast.error('Pagamento não confirmado. Tente novamente.', { id: 'pay-status' });
+      }
+      // limpa o search param
+      const np = new URLSearchParams(searchParams);
+      np.delete('session_id');
+      setSearchParams(np, { replace: true });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const plan = effectivePlan(profile);
   const days = trialDaysLeft(profile);

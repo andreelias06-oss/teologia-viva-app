@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
-import { Crown, Check, Sparkles, BookOpen, MessageCircleQuestion, Bookmark } from 'lucide-react';
+import { Crown, Check, Sparkles, BookOpen, MessageCircleQuestion, Bookmark, Loader2 } from 'lucide-react';
 import { effectivePlan, trialDaysLeft, PLAN } from '../lib/plan';
 import { useAuth } from '../contexts/AuthContext';
+import { startCheckout, PACKAGES } from '../lib/payments';
+import { toast } from 'sonner';
 
 const BENEFITS = [
   { icon: BookOpen, text: 'Acesso completo a todos os cursos da Academia' },
@@ -15,6 +18,19 @@ export default function UpgradeModal({ open, onOpenChange }) {
   const { profile } = useAuth();
   const plan = effectivePlan(profile);
   const days = trialDaysLeft(profile);
+  const pack = PACKAGES.premium_mensal;
+  const [loading, setLoading] = useState(false);
+
+  const handleCheckout = async () => {
+    setLoading(true);
+    try {
+      await startCheckout('premium_mensal');
+      // O navegador é redirecionado para Stripe; só veremos esta linha se algo deu errado.
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao iniciar pagamento');
+      setLoading(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,29 +72,28 @@ export default function UpgradeModal({ open, onOpenChange }) {
           })}
         </ul>
 
-        <div className="rounded-xl border border-gold/20 bg-navy-light/40 p-4 text-center space-y-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-sans font-semibold">Em breve</p>
-          <p className="text-foreground/80 text-sm font-sans">
-            A assinatura Premium estará disponível em breve via Stripe.
+        <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 text-center space-y-1">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold">Modo Teste · Stripe</p>
+          <p className="text-foreground/95 text-2xl font-serif">
+            R$ {pack.amount.toFixed(2).replace('.', ',')} <span className="text-sm text-foreground/60">/ mês</span>
           </p>
           <p className="text-foreground/60 text-xs font-sans italic">
-            Quer ser avisado quando lançar? Fale com o time pelo e-mail{' '}
-            <a href="mailto:contato@teologiaviva.app" className="text-gold underline">
-              contato@teologiaviva.app
-            </a>
+            Cancele quando quiser. Pagamento processado pela Stripe.
           </p>
         </div>
 
         <div className="flex flex-col gap-2 pt-1">
           <Button
-            data-testid="upgrade-modal-notify"
-            onClick={() => {
-              window.location.href =
-                'mailto:contato@teologiaviva.app?subject=Quero%20Premium%20-%20Teologia%20Viva&body=Ol%C3%A1!%20Gostaria%20de%20ser%20avisado%20quando%20o%20plano%20Premium%20estiver%20dispon%C3%ADvel.';
-            }}
+            data-testid="upgrade-modal-checkout"
+            onClick={handleCheckout}
+            disabled={loading}
             className="bg-gold text-navy-dark hover:bg-gold-soft h-11 w-full"
           >
-            <Sparkles size={16} className="mr-2" /> Quero ser avisado
+            {loading ? (
+              <><Loader2 size={16} className="mr-2 animate-spin" /> Abrindo pagamento…</>
+            ) : (
+              <><Crown size={16} className="mr-2" /> Quero ser Premium</>
+            )}
           </Button>
           <Button
             data-testid="upgrade-modal-close"
@@ -86,7 +101,7 @@ export default function UpgradeModal({ open, onOpenChange }) {
             onClick={() => onOpenChange(false)}
             className="border-gold/30 text-foreground hover:bg-gold/10 h-10 w-full"
           >
-            Fechar
+            Agora não
           </Button>
         </div>
       </DialogContent>

@@ -7,7 +7,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Skeleton } from '../components/ui/skeleton';
 import {
   Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen,
-  Bookmark, Highlighter, Save, Trash2, X, FileText, Type,
+  Bookmark, Highlighter, Save, Trash2, X, FileText, Type, Share2,
 } from 'lucide-react';
 import { callCleverTask } from '../lib/ai';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +15,8 @@ import { canUseAI, incrementAICalls } from '../lib/plan';
 import { loadChapterNotes, upsertVerseNote, COLOR_MAP } from '../lib/bibleNotes';
 import VerseExplanation from '../components/VerseExplanation';
 import ErrorBoundary from '../components/ErrorBoundary';
+import ShareVerseCard from '../components/ShareVerseCard';
+import { shareVerseCard } from '../lib/share';
 import { toast } from 'sonner';
 
 const FONT_SIZES = [
@@ -101,6 +103,30 @@ export default function Biblia() {
   }, [drawerOpen, isMobile]);
 
   const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
+
+  // Compartilhamento — ref para o card off-screen e estado de loading.
+  const shareCardRef = useRef(null);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (!drawerVerses || drawerVerses.length === 0) return;
+    setSharing(true);
+    try {
+      // pequeno delay para garantir que o card está renderizado
+      await new Promise((r) => setTimeout(r, 100));
+      const res = await shareVerseCard(shareCardRef.current, {
+        reference: refLabel,
+        title: 'Teologia Viva',
+        text: `${refLabel} — Teologia Viva`,
+      });
+      if (res.method === 'download') toast.success('Imagem baixada');
+      else if (res.method === 'share') toast.success('Compartilhado!');
+    } catch (e) {
+      toast.error(e?.message || 'Falha ao compartilhar');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
@@ -861,6 +887,29 @@ export default function Biblia() {
                 </div>
               </ErrorBoundary>
             </section>
+
+            {/* Compartilhar */}
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2 flex items-center gap-1">
+                <Share2 size={12} /> Compartilhar
+              </p>
+              <Button
+                data-testid="btn-compartilhar"
+                onClick={handleShare}
+                disabled={sharing || drawerVerses.length === 0}
+                variant="outline"
+                className="w-full border-gold/40 bg-transparent text-foreground hover:bg-gold/15 h-11"
+              >
+                {sharing ? (
+                  <><Loader2 size={16} className="mr-2 animate-spin" /> Gerando imagem…</>
+                ) : (
+                  <><Share2 size={16} className="mr-2 text-gold" /> Compartilhar versículo</>
+                )}
+              </Button>
+              <p className="text-[11px] text-foreground/55 font-sans mt-2 text-center italic">
+                Gera uma imagem elegante para WhatsApp, Stories e mais.
+              </p>
+            </section>
           </div>
         );
 
@@ -948,6 +997,26 @@ export default function Biblia() {
           </Drawer>
         );
       })()}
+
+      {/* Card off-screen para gerar PNG via html-to-image (não interativo) */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          left: '-99999px',
+          top: 0,
+          pointerEvents: 'none',
+          opacity: 0,
+        }}
+      >
+        <div ref={shareCardRef}>
+          <ShareVerseCard
+            verses={drawerVerses}
+            reference={refLabel}
+            translation={chapterData?.translation}
+          />
+        </div>
+      </div>
     </div>
   );
 }
