@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { listRows, createRow, updateRow, deleteRow } from '../../lib/admin';
-import { supabase, SUPABASE } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
-import { Plus, Pencil, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Sparkles, Pen } from 'lucide-react';
 import AdminFormDrawer from '../../components/AdminFormDrawer';
+import DevocionalAIWizard from '../../components/DevocionalAIWizard';
 import { toast } from 'sonner';
 
 const FIELDS = [
@@ -12,26 +12,33 @@ const FIELDS = [
   { key: 'titulo', label: 'Título', type: 'text', required: true },
   { key: 'versiculo_texto', label: 'Versículo (texto)', type: 'textarea', rows: 3, required: true },
   { key: 'referencia_biblica', label: 'Referência bíblica', type: 'text', required: true, hint: 'Ex.: João 3:16' },
-  { key: 'reflexao', label: 'Reflexão', type: 'textarea', rows: 6, required: true },
+  { key: 'reflexao', label: 'Reflexão & Aplicação', type: 'textarea', rows: 6, required: true },
   { key: 'oracao_sugerida', label: 'Oração sugerida', type: 'textarea', rows: 3 },
   { key: 'imagem_url', label: 'Imagem (URL)', type: 'text' },
 ];
 
 function formatDate(iso) {
-  try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return iso; }
+  try { return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR'); } catch { return iso; }
+}
+
+function formatLongDate(iso) {
+  try {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+  } catch { return iso; }
 }
 
 export default function AdminDevocionais() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try { setRows(await listRows('devocionais', { col: 'data', asc: false })); }
-    catch (e) { toast.error('Falha ao carregar'); }
+    catch { toast.error('Falha ao carregar'); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -45,95 +52,132 @@ export default function AdminDevocionais() {
         await createRow('devocionais', form);
         toast.success('Devocional criado');
       }
-      setOpen(false);
+      setFormOpen(false);
       load();
     } catch (e) { toast.error(e.message || 'Falha ao salvar'); }
   };
 
   const remove = async (r) => {
-    if (!window.confirm(`Excluir "${r.titulo}"?`)) return;
+    if (!window.confirm(`Excluir devocional de ${formatDate(r.data)}?`)) return;
     try { await deleteRow('devocionais', r.id); toast.success('Excluído'); load(); }
-    catch (e) { toast.error('Falha ao excluir'); }
+    catch { toast.error('Falha ao excluir'); }
   };
 
-  const gerarComIA = async () => {
-    const hoje = new Date().toISOString().slice(0, 10);
-    if (rows.some((r) => r.data === hoje)) {
-      if (!window.confirm('Já existe devocional para hoje. Substituir pelo novo gerado pela IA?')) return;
-    }
-    setGenerating(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token || SUPABASE.anonKey;
-      const res = await fetch(`${SUPABASE.url}/functions/v1/generate-daily-devotional`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE.anonKey,
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ date: hoje, force: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || data?.error || 'Falha');
-      toast.success(`Devocional gerado: "${data.devocional?.titulo}"`);
-      load();
-    } catch (e) {
-      toast.error(e.message || 'Falha ao gerar com IA');
-    } finally {
-      setGenerating(false);
-    }
+  // Wizard "Editar manualmente" → abre o form com os dados que a IA acabou de gerar.
+  const handleWizardEdit = (devocional) => {
+    setEditing(devocional);
+    setFormOpen(true);
   };
 
   return (
     <div className="space-y-4" data-testid="admin-devocionais">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="font-serif text-2xl text-foreground">Devocionais</h2>
-        <div className="flex gap-2">
-          <Button
-            data-testid="admin-devocionais-gerar-ia"
-            onClick={gerarComIA}
-            disabled={generating}
-            variant="outline"
-            className="border-gold/40 text-gold hover:bg-gold/10 h-10"
-          >
-            {generating ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Sparkles size={14} className="mr-1" />}
-            Gerar IA
-          </Button>
-          <Button
-            data-testid="admin-devocionais-novo"
-            onClick={() => { setEditing(null); setOpen(true); }}
-            className="bg-gold text-navy-dark hover:bg-gold-soft h-10"
-          >
-            <Plus size={16} className="mr-1" /> Novo
-          </Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 className="font-serif text-2xl text-foreground">Devocionais</h2>
+          <p className="text-xs font-sans text-foreground/60 mt-0.5">Histórico por data — cada geração da IA cria um novo registro.</p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gold/15 bg-navy-light/20 p-3 text-xs font-sans text-foreground/70">
-        <Sparkles size={12} className="inline mr-1 text-gold" />
-        Um devocional é gerado e publicado automaticamente todo dia às 02:00 (BRT) via IA. Use <span className="text-gold">Gerar IA</span> para criar/substituir o de hoje manualmente.
+      {/* Banner principal — fluxo PRIMÁRIO via IA */}
+      <div className="rounded-2xl border border-gold/30 bg-gradient-to-br from-gold/10 to-navy-light/10 p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-gold/20 border border-gold/40 flex items-center justify-center shrink-0">
+            <Sparkles size={18} className="text-gold" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-serif text-lg text-foreground">Curadoria com IA</p>
+            <p className="text-xs font-sans text-foreground/70 mt-0.5">
+              Escolha uma data, e a IA escreve um devocional cristocêntrico (versículo, reflexão, aplicação e oração) — salvo automaticamente no histórico.
+            </p>
+          </div>
+        </div>
+        <Button
+          data-testid="admin-devocionais-wizard"
+          onClick={() => setWizardOpen(true)}
+          className="w-full h-12 bg-gold text-navy-dark hover:bg-gold-soft active:scale-[0.98]"
+        >
+          <Sparkles size={16} className="mr-2" /> Criar com IA
+        </Button>
+        <button
+          type="button"
+          data-testid="toggle-manual"
+          onClick={() => setShowManual((v) => !v)}
+          className="w-full text-[11px] font-sans tracking-[0.12em] uppercase text-foreground/55 hover:text-gold/80 transition flex items-center justify-center gap-1 py-1"
+        >
+          <Pen size={11} /> {showManual ? 'Ocultar edição manual' : 'Editar manualmente'}
+        </button>
+        {showManual && (
+          <Button
+            data-testid="admin-devocionais-novo"
+            onClick={() => { setEditing(null); setFormOpen(true); }}
+            variant="outline"
+            className="w-full h-10 border-gold/30 text-foreground hover:bg-gold/10"
+          >
+            <Plus size={14} className="mr-1" /> Novo devocional manual
+          </Button>
+        )}
       </div>
 
-      {loading ? <Skeleton className="h-20 w-full bg-navy-light/40" /> : (
-        <ul className="space-y-2">
-          {rows.map((r) => (
-            <li key={r.id} data-testid={`admin-devo-${r.id}`} className="rounded-xl border border-gold/15 bg-navy-light/30 p-4 flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-gold/80 font-sans font-semibold">{formatDate(r.data)}</p>
-                <p className="font-serif text-lg text-foreground truncate">{r.titulo}</p>
-                <p className="text-xs font-sans text-foreground/60 line-clamp-1">{r.referencia_biblica}</p>
-              </div>
-              <button data-testid={`admin-devo-edit-${r.id}`} onClick={() => { setEditing(r); setOpen(true); }} className="p-2 text-gold/80 hover:text-gold"><Pencil size={16} /></button>
-              <button data-testid={`admin-devo-delete-${r.id}`} onClick={() => remove(r)} className="p-2 text-foreground/50 hover:text-destructive"><Trash2 size={16} /></button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* Histórico */}
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-sans font-semibold mb-2">
+          Histórico ({rows.length})
+        </p>
+        {loading ? (
+          <Skeleton className="h-20 w-full bg-navy-light/40" />
+        ) : rows.length === 0 ? (
+          <div className="rounded-xl border border-gold/15 bg-navy-light/20 p-6 text-center">
+            <p className="text-sm font-sans text-foreground/65">Nenhum devocional ainda. Comece criando o de hoje com a IA.</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                data-testid={`admin-devo-${r.id}`}
+                className="rounded-xl border border-gold/15 bg-navy-light/30 p-4 flex items-start gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-gold/80 font-sans font-semibold">
+                    {formatLongDate(r.data)}
+                  </p>
+                  <p className="font-serif text-lg text-foreground truncate">{r.titulo}</p>
+                  <p className="text-xs font-sans text-foreground/60 line-clamp-1">{r.referencia_biblica}</p>
+                </div>
+                <button
+                  data-testid={`admin-devo-edit-${r.id}`}
+                  onClick={() => { setEditing(r); setFormOpen(true); }}
+                  className="p-2 text-gold/80 hover:text-gold"
+                  aria-label="Editar"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  data-testid={`admin-devo-delete-${r.id}`}
+                  onClick={() => remove(r)}
+                  className="p-2 text-foreground/50 hover:text-destructive"
+                  aria-label="Excluir"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
+      {/* Wizard fullscreen */}
+      <DevocionalAIWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onSaved={load}
+        onEdit={handleWizardEdit}
+      />
+
+      {/* Editor manual */}
       <AdminFormDrawer
-        open={open}
-        onOpenChange={setOpen}
+        open={formOpen}
+        onOpenChange={setFormOpen}
         title={editing?.id ? 'Editar Devocional' : 'Novo Devocional'}
         fields={FIELDS}
         initial={editing || { data: new Date().toISOString().slice(0, 10) }}

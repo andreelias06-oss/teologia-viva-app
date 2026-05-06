@@ -47,6 +47,23 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Implementado (05/mai/2026 — Curadoria de Devocionais por Data + Wizard IA)
+- [x] **Histórico por data (não substitui mais)** (`AdminDevocionais.jsx`):
+  - Lista todas as datas em ordem decrescente (mais recente em cima).
+  - Cada item exibe: data formatada (`seg, 05 mai`), título, referência bíblica.
+  - Edge function `generate-daily-devotional` já suporta `force:true` → cria nova linha por data (pré-existente é deletada).
+- [x] **Wizard IA fullscreen** (`DevocionalAIWizard.jsx`):
+  - Modal sempre montado no DOM (visibility toggle, padrão anti-crash do app).
+  - Campo de Data obrigatório (default = hoje); admin pode escolher futuro (agendar) ou passado (preencher histórico).
+  - Botão "Gerar com IA" → chama Edge Function com `{ date, force:true }` → INSERT idempotente em `devocionais`.
+  - **Auto-save**: salva no Supabase ANTES de mostrar o preview ao admin.
+  - Preview com 4 seções (Título / Versículo + Referência / Reflexão & Aplicação / Oração) e badge ✓ "Devocional salvo automaticamente em {data}".
+  - Ações: **Concluir** (gold), **Gerar novamente** (outline), **Editar manualmente** (abre AdminFormDrawer com os dados gerados).
+- [x] **IA assume o controle** (`AdminDevocionais.jsx`):
+  - Banner principal navy/dourado com CTA "Criar com IA" (h-12, gold).
+  - "Editar manualmente" virou um link discreto (`toggle-manual`) — reveladdo só sob demanda. Fluxo principal = IA.
+- [x] **Compatibilidade**: edição manual existente (PencilIcon na lista) continua funcional via `AdminFormDrawer`.
+
 ## Hotfix (05/mai/2026 — Selection Bar Invisível + Anti-Crash)
 - [x] **BUG: `contain: layout paint` no `<main>` quebrou `position: fixed`**: a barra de seleção da Bíblia estava invisível porque `<main>` virava um novo *containing block* para descendentes fixos. Removido `contain` do `<main>` em `Layout.jsx`. Mantido apenas em containers sem filhos fixed (AulaNotes, sidebar da Bíblia, modal do Tutor IA).
 - [x] **Barra de seleção SEMPRE MONTADA** (`Biblia.jsx`): substituído `selectedVerses.length > 0 ? (...) : null` por `visibility/opacity/pointerEvents` toggles. Evita mount/unmount cycles que disparavam `insertBefore` no Chrome Android.
