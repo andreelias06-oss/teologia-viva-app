@@ -133,12 +133,13 @@ export default function Biblia() {
     if (!verses || verses.length === 0) return;
     setSharing(true);
     try {
-      // Respiro técnico: evita 'corrida de processamento' do Chrome Android
-      // (insertBefore crash quando state/DOM ainda está estabilizando).
+      // Tira foco do textarea/input — evita reflow do teclado durante a captura.
+      // NÃO adicionamos setTimeout aqui: o share.js já dá 200ms ANTES do html-to-image,
+      // e o `navigator.share` precisa ser disparado dentro da MESMA cadeia de promises
+      // do clique do usuário. Um setTimeout aqui invalidaria o user-gesture no Chrome Android.
       if (typeof document !== 'undefined' && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch { /* ignore */ }
       }
-      await new Promise((r) => setTimeout(r, 200));
       const res = await shareVerseCard(shareCardRef.current, {
         reference: refLabel,
         title: 'Teologia Viva',
@@ -161,7 +162,7 @@ export default function Biblia() {
       if (typeof document !== 'undefined' && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch { /* ignore */ }
       }
-      await new Promise((r) => setTimeout(r, 200));
+      // Sem setTimeout externo: share.js já encapsula o respiro de 200ms.
       await saveVerseCard(shareCardRef.current, { reference: refLabel });
       toast.success('Imagem salva na galeria');
     } catch (e) {

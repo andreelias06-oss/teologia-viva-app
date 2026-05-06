@@ -47,6 +47,15 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Hotfix (05/mai/2026 — Compartilhamento Chrome Android / WhatsApp)
+- [x] **`lib/share.js` — refatorada para Chrome S24 Ultra**:
+  - **File real**: continua usando `new File([blob], fileName, { type: 'image/png' })`. Filename slugificado e limitado a 60 chars. Helper `blobToImageFile` isolado.
+  - **`navigator.canShare({ files })` validado** antes de qualquer `navigator.share`.
+  - **Fallback progressivo de payload** (`tryShareSequential`): tenta `{files,title,text}` → `{files,title}` → `{files}` apenas. Resolve casos onde WhatsApp some do share sheet do Chrome quando o payload contém `text` + `files`.
+  - **User-gesture preservado**: removido `setTimeout(200)` *externo* em `Biblia.jsx`. O respiro de 200ms agora vive APENAS dentro de `generateBlob` (antes do `html-to-image`); o `navigator.share` é chamado direto, sem delays entre o `canShare` e o `share`, mantendo o user-activation do clique.
+  - **Fallback seguro**: se share falhar com erro não-Abort em todas as tentativas, ou `canShare` retornar false, baixa a imagem (`triggerDownloadFromBlob` com `appendChild` no body — nunca `insertBefore`).
+  - `handleShare` / `handleSaveImage` em `Biblia.jsx` mantêm `activeElement.blur()` (sem custo de promessa diferida).
+
 ## Implementado (05/mai/2026 — Curadoria de Devocionais por Data + Wizard IA)
 - [x] **Histórico por data (não substitui mais)** (`AdminDevocionais.jsx`):
   - Lista todas as datas em ordem decrescente (mais recente em cima).
