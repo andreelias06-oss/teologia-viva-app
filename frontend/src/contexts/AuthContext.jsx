@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { migrateLocalProgressToSupabase } from '../lib/progresso';
+import { fetchAppSettings, DEFAULT_SETTINGS } from '../lib/appSettings';
+import { setPaywallEnabled } from '../lib/plan';
 
 const AuthCtx = createContext(null);
 
@@ -8,6 +10,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [appSettings, setAppSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId) => {
@@ -41,6 +44,13 @@ export function AuthProvider({ children }) {
       setSession(data.session);
       setUser(data.session?.user || null);
       setLoading(false);
+      // Carrega configurações globais (paywall / beta) em paralelo. Falha
+      // silenciosa: usa DEFAULT_SETTINGS (paywall OFF) se a tabela não existir.
+      fetchAppSettings().then((s) => {
+        if (!mounted) return;
+        setAppSettings(s);
+        setPaywallEnabled(!!s.paywall_enabled);
+      }).catch(() => {});
       // Load profile in background so loader unblocks quickly
       if (data.session?.user) {
         loadProfile(data.session.user.id);
@@ -126,8 +136,16 @@ export function AuthProvider({ children }) {
     if (user?.id) await loadProfile(user.id);
   };
 
+  // Permite que o painel admin atualize as flags globais sem reload.
+  const refreshAppSettings = useCallback(async () => {
+    const next = await fetchAppSettings();
+    setAppSettings(next);
+    setPaywallEnabled(!!next.paywall_enabled);
+    return next;
+  }, []);
+
   return (
-    <AuthCtx.Provider value={{ session, user, profile, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthCtx.Provider value={{ session, user, profile, appSettings, loading, signUp, signIn, signOut, refreshProfile, refreshAppSettings }}>
       {children}
     </AuthCtx.Provider>
   );

@@ -15,7 +15,7 @@ import { pollSessionStatus } from '../lib/payments';
 import { toast } from 'sonner';
 
 export default function Perfil() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, appSettings, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [progressoAtual, setProgressoAtual] = useState({ curso: null, pct: 0, totalAulas: 0, doneAulas: 0 });
@@ -56,6 +56,8 @@ export default function Perfil() {
   const plan = effectivePlan(profile);
   const days = trialDaysLeft(profile);
   const aiUsed = getAICallsToday(user?.id);
+  // Modo Beta — paywall desligado pelo admin via `app_settings`.
+  const betaMode = !appSettings?.paywall_enabled;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -183,7 +185,13 @@ export default function Perfil() {
     }
   };
 
-  const planLabel = plan === PLAN.PREMIUM ? 'Premium' : plan === PLAN.TRIAL ? `Trial · ${days} dia(s)` : 'Free';
+  const planLabel = betaMode
+    ? 'Premium · Beta'
+    : plan === PLAN.PREMIUM
+      ? 'Premium'
+      : plan === PLAN.TRIAL
+        ? `Trial · ${days} dia(s)`
+        : 'Free';
 
   return (
     <div className="space-y-6" data-testid="page-perfil">
@@ -204,13 +212,22 @@ export default function Perfil() {
         best={profile?.best_streak || 0}
       />
 
-      <div className={`rounded-2xl border p-5 space-y-3 ${plan === PLAN.PREMIUM ? 'border-gold bg-gold/10' : 'border-gold/20 bg-navy-light/30'}`}>
+      <div
+        data-testid="status-conta-card"
+        className={`rounded-2xl border p-5 space-y-3 ${
+          betaMode
+            ? 'border-gold bg-gradient-to-br from-gold/15 to-navy-light/10'
+            : plan === PLAN.PREMIUM
+              ? 'border-gold bg-gold/10'
+              : 'border-gold/20 bg-navy-light/30'
+        }`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {plan === PLAN.PREMIUM ? <Crown size={18} className="text-gold" /> : <Sparkles size={18} className="text-gold" />}
+            {betaMode || plan === PLAN.PREMIUM ? <Crown size={18} className="text-gold" /> : <Sparkles size={18} className="text-gold" />}
             <p className="font-serif text-2xl text-foreground" data-testid="perfil-plano">{planLabel}</p>
           </div>
-          {plan !== PLAN.PREMIUM && (
+          {!betaMode && plan !== PLAN.PREMIUM && (
             <Button
               data-testid="btn-fazer-upgrade"
               onClick={() => setUpgradeOpen(true)}
@@ -220,18 +237,26 @@ export default function Perfil() {
             </Button>
           )}
         </div>
-        {plan === PLAN.TRIAL && (
-          <p className="text-xs text-foreground/70 font-sans">
-            Você tem acesso completo por mais {days} dia(s). Após esse período, sua conta passa para o plano Free.
+        {betaMode ? (
+          <p className="text-xs text-foreground/75 font-sans leading-relaxed" data-testid="beta-message">
+            {appSettings?.beta_message || 'Modo Beta — Acesso completo gratuito durante o período de testes.'}
           </p>
-        )}
-        {plan === PLAN.FREE && (
-          <p className="text-xs text-foreground/70 font-sans">
-            Plano Free: 5 consultas de IA por dia ({aiUsed}/5 usadas hoje) · acesso à 1ª aula de cada curso.
-          </p>
-        )}
-        {plan === PLAN.PREMIUM && (
-          <p className="text-xs text-foreground/70 font-sans">Acesso total a aulas, IA ilimitada e recursos avançados.</p>
+        ) : (
+          <>
+            {plan === PLAN.TRIAL && (
+              <p className="text-xs text-foreground/70 font-sans">
+                Você tem acesso completo por mais {days} dia(s). Após esse período, sua conta passa para o plano Free.
+              </p>
+            )}
+            {plan === PLAN.FREE && (
+              <p className="text-xs text-foreground/70 font-sans">
+                Plano Free: 5 consultas de IA por dia ({aiUsed}/5 usadas hoje) · acesso à 1ª aula de cada curso.
+              </p>
+            )}
+            {plan === PLAN.PREMIUM && (
+              <p className="text-xs text-foreground/70 font-sans">Acesso total a aulas, IA ilimitada e recursos avançados.</p>
+            )}
+          </>
         )}
       </div>
 

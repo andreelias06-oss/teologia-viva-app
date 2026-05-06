@@ -20,6 +20,7 @@ import AdminEixos from './pages/admin/AdminEixos';
 import AdminCursos from './pages/admin/AdminCursos';
 import AdminAulas from './pages/admin/AdminAulas';
 import AdminEventos from './pages/admin/AdminEventos';
+import AdminConfiguracoes from './pages/admin/AdminConfiguracoes';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -87,6 +88,7 @@ function App() {
               <Route path="cursos" element={<AdminCursos />} />
               <Route path="aulas" element={<AdminAulas />} />
               <Route path="eventos" element={<AdminEventos />} />
+              <Route path="configuracoes" element={<AdminConfiguracoes />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

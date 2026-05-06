@@ -9,6 +9,7 @@ const TABS = [
   { to: '/admin/cursos', label: 'Cursos', testid: 'admin-tab-cursos' },
   { to: '/admin/aulas', label: 'Aulas', testid: 'admin-tab-aulas' },
   { to: '/admin/eventos', label: 'Eventos', testid: 'admin-tab-eventos' },
+  { to: '/admin/configuracoes', label: 'Configurações', testid: 'admin-tab-configuracoes' },
 ];
 
 export default function AdminLayout() {
