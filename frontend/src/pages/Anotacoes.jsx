@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
@@ -27,7 +27,7 @@ export default function Anotacoes() {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     const { data } = await supabase
@@ -38,9 +38,9 @@ export default function Anotacoes() {
       .limit(100);
     setItems(data || []);
     setLoading(false);
-  };
+  }, [user?.id]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     if (!conteudo.trim()) return;
