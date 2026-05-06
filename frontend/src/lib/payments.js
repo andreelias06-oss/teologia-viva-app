@@ -27,9 +27,15 @@ export async function startCheckout(packageId = 'premium_mensal') {
       origin_url: window.location.origin,
     }),
   });
-  const j = await res.json();
-  if (!res.ok || !j.url) throw new Error(j.error || 'Falha ao criar sessão de pagamento');
-  window.location.href = j.url;
+  // Lê o body UMA VEZ SÓ como texto, depois tenta parsear JSON. Evita
+  // 'body stream already read' caso o caller re-leia e trata bodies não-JSON.
+  const rawText = await res.text();
+  let data = {};
+  try { data = rawText ? JSON.parse(rawText) : {}; } catch { /* body não é JSON */ }
+  if (!res.ok || !data.url) {
+    throw new Error(data.error || rawText.slice(0, 200) || 'Falha ao criar sessão de pagamento');
+  }
+  window.location.href = data.url;
 }
 
 /**
