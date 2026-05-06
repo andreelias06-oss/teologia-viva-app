@@ -47,6 +47,22 @@ Construir o aplicativo **Teologia Viva** — um PWA mobile-first integrado com S
 - [x] Perfil com status do plano, contador de IA usado, progresso do curso atual
 - [x] Rate limit de IA (5/dia para free, ilimitado trial/premium) via localStorage
 
+## Hotfix (06/mai/2026 — Compartilhamento Canvas-only / Anti-Crash Definitivo)
+- [x] **Causa raiz do `insertBefore` no Chrome encontrada**: `html-to-image` clonava o nó off-screen `<ShareVerseCard>` durante a captura, e a clonagem usa `insertBefore` internamente. Se o React fizesse re-render do nó-fonte concorrentemente (ex.: state update, drawer fechando), o crash retornava.
+- [x] **Solução: renderização 100% via Canvas API** (`lib/canvasShareCard.js`, novo):
+  - `paintShareCardBlob({ verses, reference, translation })` pinta o card 1080×1920 diretamente no canvas (gradiente, ornamentos, branding, versículos, referência) — **zero clonagem de DOM, zero dependência do React tree**.
+  - Usa `OffscreenCanvas` quando disponível, fallback para `<canvas>` em memória (sem `appendChild`).
+  - `await document.fonts.ready` antes de pintar, garantindo Cormorant Garamond carregado.
+  - Saída via `canvas.toBlob({ type: 'image/png' })`.
+- [x] **`lib/share.js` reescrita**:
+  - Filename FORÇADO para `compartilhar.png` + MIME estrito `image/png` (Chrome Android só lista WhatsApp/Insta/Stories quando ambos batem).
+  - `tryShareSequential` mantém o fallback progressivo de payload (`{files,title,text}` → `{files,title}` → `{files}`).
+  - **Try/catch global**: qualquer erro (incluindo "node not found" ou insertBefore) cai silenciosamente no download — nunca exibe modal vermelho.
+  - Última linha de defesa: se até o canvas falhar, tenta repintar do zero só pra download.
+- [x] **`<ShareVerseCard>` JSX off-screen REMOVIDO de `Biblia.jsx`** — não há mais nó React envolvido na geração da imagem. Eliminado a fonte raiz do crash.
+- [x] **Cleanup useEffect** (`Biblia.jsx`): `isMountedRef` previne `setSharing` em componente desmontado se o usuário fechar o modal mid-share. Toasts e setSharing só ocorrem se ainda montado.
+- [x] **Smoke test passou**: PNG 1080×1920 RGBA gerado (252KB), filename `compartilhar.png`, MIME image/png, **zero console errors**.
+
 ## Hotfix (05/mai/2026 — Compartilhamento Chrome Android / WhatsApp)
 - [x] **`lib/share.js` — refatorada para Chrome S24 Ultra**:
   - **File real**: continua usando `new File([blob], fileName, { type: 'image/png' })`. Filename slugificado e limitado a 60 chars. Helper `blobToImageFile` isolado.

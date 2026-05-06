@@ -15,7 +15,6 @@ import { canUseAI, incrementAICalls } from '../lib/plan';
 import { loadChapterNotes, upsertVerseNote, COLOR_MAP } from '../lib/bibleNotes';
 import VerseExplanation from '../components/VerseExplanation';
 import ErrorBoundary from '../components/ErrorBoundary';
-import ShareVerseCard from '../components/ShareVerseCard';
 import { shareVerseCard, saveVerseCard } from '../lib/share';
 import { toast } from 'sonner';
 
@@ -120,8 +119,14 @@ export default function Biblia() {
 
   const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
 
-  // Compartilhamento — ref para o card off-screen e estado de loading.
-  const shareCardRef = useRef(null);
+  // Compartilhamento — usa Canvas direto (sem dependência de DOM ref).
+  // Cleanup ref: se o componente desmontar enquanto o share está rolando,
+  // evitamos `setSharing` em componente desmontado (warning + memory leak).
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
   const [sharing, setSharing] = useState(false);
 
   // Fonte de versículos para o card de compartilhamento:
@@ -132,25 +137,25 @@ export default function Biblia() {
     const verses = getCardVerses();
     if (!verses || verses.length === 0) return;
     setSharing(true);
+    // Try/catch global: nenhuma falha (incluindo "node not found" ou insertBefore)
+    // pode mostrar tela de erro vermelha — sempre retorna algo útil pro usuário.
     try {
-      // Tira foco do textarea/input — evita reflow do teclado durante a captura.
-      // NÃO adicionamos setTimeout aqui: o share.js já dá 200ms ANTES do html-to-image,
-      // e o `navigator.share` precisa ser disparado dentro da MESMA cadeia de promises
-      // do clique do usuário. Um setTimeout aqui invalidaria o user-gesture no Chrome Android.
       if (typeof document !== 'undefined' && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch { /* ignore */ }
       }
-      const res = await shareVerseCard(shareCardRef.current, {
-        reference: refLabel,
-        title: 'Teologia Viva',
-        text: `${refLabel} — Teologia Viva`,
-      });
-      if (res.method === 'download') toast.success('Imagem baixada');
-      else if (res.method === 'share') toast.success('Compartilhado!');
-    } catch (e) {
-      toast.error(e?.message || 'Falha ao compartilhar');
+      // Passa DADOS (não nó DOM) — Canvas pinta tudo do zero, isolado de React.
+      const res = await shareVerseCard(
+        { verses, reference: refLabel, translation: chapterData?.translation },
+        { title: 'Teologia Viva', text: `${refLabel} — Teologia Viva` },
+      );
+      if (!isMountedRef.current) return;
+      if (res?.method === 'share') toast.success('Compartilhado!');
+      else if (res?.method === 'download') toast.success('Imagem salva na galeria');
+      // 'cancelled' e 'failed' são silenciosos.
+    } catch {
+      // Nunca exibe modal vermelho. O share.js já lida com fallback.
     } finally {
-      setSharing(false);
+      if (isMountedRef.current) setSharing(false);
     }
   };
 
@@ -162,13 +167,15 @@ export default function Biblia() {
       if (typeof document !== 'undefined' && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch { /* ignore */ }
       }
-      // Sem setTimeout externo: share.js já encapsula o respiro de 200ms.
-      await saveVerseCard(shareCardRef.current, { reference: refLabel });
-      toast.success('Imagem salva na galeria');
-    } catch (e) {
-      toast.error(e?.message || 'Falha ao salvar imagem');
+      const res = await saveVerseCard(
+        { verses, reference: refLabel, translation: chapterData?.translation },
+      );
+      if (!isMountedRef.current) return;
+      if (res?.method === 'download') toast.success('Imagem salva na galeria');
+    } catch {
+      /* silencioso */
     } finally {
-      setSharing(false);
+      if (isMountedRef.current) setSharing(false);
     }
   };
 
@@ -1163,25 +1170,8 @@ export default function Biblia() {
         );
       })()}
 
-      {/* Card off-screen para gerar PNG via html-to-image (não interativo) */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'fixed',
-          left: '-99999px',
-          top: 0,
-          pointerEvents: 'none',
-          opacity: 0,
-        }}
-      >
-        <div ref={shareCardRef}>
-          <ShareVerseCard
-            verses={getCardVerses()}
-            reference={refLabel}
-            translation={chapterData?.translation}
-          />
-        </div>
-      </div>
+      {/* Card de compartilhamento agora é pintado 100% via Canvas (`lib/canvasShareCard.js`).
+          Não há mais nó off-screen no DOM — eliminamos a fonte raiz de `insertBefore`. */}
     </div>
   );
 }

@@ -1,71 +1,45 @@
 // Helper para compartilhar/salvar versículos como imagem.
 //
-// Compatibilidade Chrome Android (S24 Ultra) — pontos críticos:
-//  • `navigator.share` precisa ser chamado dentro da MESMA cadeia de promises
-//    iniciada por um gesto do usuário; portanto fazemos o "respiro técnico"
-//    (200ms) ANTES de `html-to-image`, e NUNCA entre o canShare e o share.
-//  • O Web Share API rejeita objetos que não sejam `File` reais — usamos
-//    `new File([blob], fileName, { type: 'image/png' })`.
-//  • Validamos com `navigator.canShare({ files: [file] })` antes do share.
-//  • Quando o sheet do Chrome esconde apps (ex.: WhatsApp filtra payloads
-//    com texto+arquivo), tentamos novamente sem o campo `text`.
-//  • Fallback final: download da imagem (usa `appendChild` no body — nunca
-//    `insertBefore` — para não disparar o crash insertBefore do Chrome).
+// CRASH-FREE Chrome Android (S24 Ultra):
+//  • Renderização 100% via Canvas (`canvasShareCard.js`) — SEM html-to-image,
+//    SEM clonagem de DOM, SEM `insertBefore` em nenhum lugar do pipeline.
+//  • Filename forçado para `compartilhar.png` + MIME estrito `image/png`.
+//    Chrome só lista WhatsApp/Insta/Stories no share sheet quando o arquivo
+//    tem extensão `.png` clara e MIME exatamente `image/png`.
+//  • Web Share API chamado dentro da MESMA cadeia de promises do clique
+//    (sem setTimeout entre `canShare` e `share`) para preservar o user-gesture.
+//  • Try/catch global: qualquer falha não-Abort (incluindo "node not found"
+//    causado por re-render concorrente) cai silenciosamente no download.
 
-import { toBlob } from 'html-to-image';
+import { paintShareCardBlob } from './canvasShareCard';
 
-// "Respiro técnico" — dá ao Chrome Android tempo para finalizar reflows do teclado
-// e da atualização de estado antes de rodar html-to-image (operação pesada).
-const BREATHING_MS = 200;
-
-async function generateBlob(cardEl) {
-  if (!cardEl) throw new Error('Card não encontrado');
-  // Respiro antes da captura — feito ANTES da captura, NUNCA entre canShare e share.
-  await new Promise((r) => setTimeout(r, BREATHING_MS));
-  const blob = await toBlob(cardEl, {
-    cacheBust: true,
-    pixelRatio: 1,
-    backgroundColor: '#061226',
-  });
-  if (!blob) throw new Error('Falha ao gerar imagem');
-  return blob;
-}
-
-function buildFileName(reference) {
-  const slug = (reference || 'versiculo').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  // Filename curto + extensão `.png` consistente com `type: image/png`.
-  return `teologia-viva-${slug.slice(0, 60)}.png`;
-}
+const FILE_NAME = 'compartilhar.png';
+const FILE_TYPE = 'image/png';
 
 // Cria um File real de tipo image/png — Chrome Android EXIGE isso pra
 // listar apps de imagem (WhatsApp/Instagram/etc.) no share sheet.
-function blobToImageFile(blob, fileName) {
-  return new File([blob], fileName, { type: 'image/png' });
+function blobToImageFile(blob) {
+  return new File([blob], FILE_NAME, { type: FILE_TYPE });
 }
 
 // Tenta `navigator.share` com payloads progressivamente mais conservadores.
-// Alguns apps (ex.: WhatsApp no Chrome Android) só aparecem no sheet quando
-// o payload é apenas { files }, sem `text`. Tentamos:
-//   1) { files, title, text }
-//   2) { files, title }       (remove text)
-//   3) { files }              (apenas o arquivo)
+// WhatsApp no Chrome Android às vezes some quando o payload tem `text+files`.
 async function tryShareSequential(file, opts) {
   const attempts = [
-    { files: [file], title: opts.title || 'Teologia Viva', text: opts.text || '' },
-    { files: [file], title: opts.title || 'Teologia Viva' },
+    { files: [file], title: opts?.title || 'Teologia Viva', text: opts?.text || '' },
+    { files: [file], title: opts?.title || 'Teologia Viva' },
     { files: [file] },
   ];
   let lastErr = null;
   for (const payload of attempts) {
     if (!navigator.canShare?.(payload)) continue;
     try {
-      // Chamada DIRETA — sem `setTimeout` aqui, para preservar o user-gesture.
+      // Chamada DIRETA — sem setTimeout, preserva user-gesture.
       await navigator.share(payload);
       return { method: 'share' };
     } catch (e) {
       if (e?.name === 'AbortError') return { method: 'cancelled' };
       lastErr = e;
-      // Continua tentando o próximo payload mais conservador.
     }
   }
   if (lastErr) throw lastErr;
@@ -73,57 +47,74 @@ async function tryShareSequential(file, opts) {
 }
 
 /**
- * Compartilha o card como imagem via Web Share API (Chrome/Edge/Safari mobile).
- * Fallback automático: download do PNG.
+ * Compartilha o card como imagem via Web Share API.
+ * Fallback automático e silencioso: download do PNG.
+ *
+ * Recebe os DADOS do versículo (não um nó DOM) — pinta o card via Canvas API,
+ * eliminando qualquer dependência do React render tree.
+ *
+ * Retorna { method: 'share' | 'download' | 'cancelled' }. NUNCA lança erro
+ * de "insertBefore" ou "node not found" (try/catch global protege).
  *
  * IMPORTANTE: chamar SEMPRE em cima de um clique direto do usuário (onClick).
- * Não envolver em setTimeout/setInterval ou em handlers diferidos — o Chrome
- * Android invalida o user-gesture e bloqueia o share sheet.
  */
-export async function shareVerseCard(cardEl, opts = {}) {
-  const blob = await generateBlob(cardEl);
-  const fileName = buildFileName(opts.reference);
-  const file = blobToImageFile(blob, fileName);
+export async function shareVerseCard(payload, opts = {}) {
+  try {
+    const blob = await paintShareCardBlob(payload);
+    const file = blobToImageFile(blob);
 
-  // Web Share API só funciona com File real + canShare({files}).
-  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    // Web Share API só funciona com File real + canShare({files}).
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        const res = await tryShareSequential(file, opts);
+        if (res?.method === 'share') return res;
+        if (res?.method === 'cancelled') return res;
+      } catch {
+        // Cai no fallback de download abaixo.
+      }
+    }
+
+    // Fallback seguro: sempre baixa a imagem se o share não rolou.
+    triggerDownloadFromBlob(blob);
+    return { method: 'download' };
+  } catch {
+    // Última linha de defesa: tenta gerar de novo só pra download.
     try {
-      const res = await tryShareSequential(file, opts);
-      if (res) return res;
+      const blob = await paintShareCardBlob(payload);
+      triggerDownloadFromBlob(blob);
+      return { method: 'download' };
     } catch {
-      // Cai no fallback de download abaixo.
+      return { method: 'failed' };
     }
   }
-
-  // Fallback seguro: download da imagem (sempre garante "alguma coisa pro usuário").
-  triggerDownloadFromBlob(blob, fileName);
-  return { method: 'download' };
 }
 
 /**
  * Salva a imagem direto na galeria/Downloads do dispositivo.
  */
-export async function saveVerseCard(cardEl, opts = {}) {
-  const blob = await generateBlob(cardEl);
-  const fileName = buildFileName(opts.reference);
-  triggerDownloadFromBlob(blob, fileName);
-  return { method: 'download' };
+export async function saveVerseCard(payload, _opts = {}) {
+  try {
+    const blob = await paintShareCardBlob(payload);
+    triggerDownloadFromBlob(blob);
+    return { method: 'download' };
+  } catch {
+    return { method: 'failed' };
+  }
 }
 
-// Usa appendChild no body (NUNCA insertBefore) + revogação de URL para evitar
-// o "insertBefore crash" do Chrome mobile durante reconciliação.
-function triggerDownloadFromBlob(blob, fileName) {
+// Usa appendChild no body (NUNCA insertBefore) + revogação de URL.
+// O `<a>` é anexado ao body diretamente e removido só depois de 1s,
+// garantindo que o navegador termine de processar o click.
+function triggerDownloadFromBlob(blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = fileName;
+  a.download = FILE_NAME;
   a.style.display = 'none';
-  // appendChild explícito no body — evita qualquer insertBefore em árvores React.
   document.body.appendChild(a);
   a.click();
-  // Remove de forma assíncrona pra deixar o navegador processar o click.
   setTimeout(() => {
-    try { document.body.removeChild(a); } catch { /* ignore */ }
+    try { if (a.parentNode === document.body) document.body.removeChild(a); } catch { /* ignore */ }
     try { URL.revokeObjectURL(url); } catch { /* ignore */ }
   }, 1000);
 }
