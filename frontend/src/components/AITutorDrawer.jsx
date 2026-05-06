@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from './ui/drawer';
+import { Drawer, DrawerContent } from './ui/drawer';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Sparkles, Send, Loader2, X } from 'lucide-react';
@@ -8,14 +8,41 @@ import { canUseAI, incrementAICalls } from '../lib/plan';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 
+/**
+ * AITutorDrawer — chat fullscreen no mobile, drawer no desktop.
+ *
+ * Layout estilo WhatsApp/Telegram (pure flex column, sem position:absolute):
+ *   ┌──────────────────────────┐
+ *   │  Header (flex-shrink: 0) │
+ *   ├──────────────────────────┤
+ *   │  Messages (flex: 1,      │
+ *   │           overflow-y:    │
+ *   │           auto)          │
+ *   │                          │
+ *   ├──────────────────────────┤
+ *   │  Input (flex-shrink: 0)  │
+ *   └──────────────────────────┘
+ *
+ * - 100dvh no mobile responde ao teclado Android (a área visível encolhe e
+ *   o input "sobe junto" naturalmente, sem cálculo manual).
+ * - O input é IRMÃO da área de mensagens (não overlay) → nunca é "engolido"
+ *   pelo teclado nem por reflows do Chrome.
+ * - Auto-scroll para o final em cada mensagem nova.
+ */
 export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = 'Tutor IA', descricao }) {
   const { user, profile } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
+  const isMountedRef = useRef(true);
 
-  // Detecta dispositivo touch (S24 Ultra etc.) — modal fullscreen no mobile.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  // Detecta dispositivo touch — mobile recebe modal fullscreen sem Vaul.
   const [isMobile, setIsMobile] = useState(() => {
     try { return window.matchMedia('(pointer: coarse)').matches; }
     catch { return false; }
@@ -38,16 +65,17 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
     }
   }, [open, isMobile]);
 
+  // Limpa mensagens quando o drawer abre (novo contexto).
   useEffect(() => {
     if (open) setMessages([]);
   }, [open, contexto]);
 
-  // Auto-scroll: sempre que chegar nova mensagem (user ou IA) ou loading mudar.
+  // Auto-scroll para o final em cada mensagem/loading.
+  // 2 passos (imediato + rAF) garante que o scroll segue o layout final
+  // mesmo depois que o React pinta a nova bolha.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Dois passos: imediato + rAF — garante que o scroll siga o layout final
-    // mesmo depois que o React pintar a nova bolha de mensagem.
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     const raf = requestAnimationFrame(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
@@ -68,47 +96,69 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
     setLoading(true);
     try {
       const fullPrompt = contexto
-        ? `Contexto da aula:\n${contexto}\n\nPergunta do aluno: ${q}\n\nResponda como tutor de teologia, em português, com base bíblica clara, citando referências quando útil.`
+        ? `Contexto:\n${contexto}\n\nPergunta do aluno: ${q}\n\nResponda como tutor de teologia, em português, com base bíblica clara, citando referências quando útil.`
         : `Pergunta sobre teologia: ${q}\n\nResponda em português, com base bíblica clara.`;
       const answer = await callCleverTask(fullPrompt);
+      if (!isMountedRef.current) return;
       incrementAICalls(user?.id);
       setMessages((m) => [...m, { role: 'assistant', text: answer }]);
-    } catch (e) {
+    } catch {
+      if (!isMountedRef.current) return;
       toast.error('Falha ao consultar o Tutor IA');
       setMessages((m) => [...m, { role: 'assistant', text: 'Desculpe, não consegui responder agora. Tente novamente.' }]);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
-  // ─── Conteúdo compartilhado entre Drawer (desktop) e Modal Fullscreen (mobile) ───
+  // ─── Header (compartilhado mobile + desktop) ───
+  const header = (
+    <div
+      className="flex items-center justify-between px-5 py-3 border-b border-gold/15"
+      style={{ background: '#001529', flexShrink: 0 }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="font-serif text-xl text-gold flex items-center gap-2 truncate">
+          <Sparkles size={18} strokeWidth={1.5} /> {titulo}
+        </p>
+        {descricao ? (
+          <p className="text-foreground/70 text-xs font-sans truncate">{descricao}</p>
+        ) : null}
+      </div>
+      {isMobile ? (
+        <button
+          type="button"
+          data-testid="ai-tutor-mobile-close"
+          onClick={() => onOpenChange(false)}
+          aria-label="Fechar"
+          className="ml-3 w-10 h-10 rounded-full border border-gold/30 text-foreground hover:bg-gold/10 flex items-center justify-center shrink-0"
+        >
+          <X size={20} />
+        </button>
+      ) : null}
+    </div>
+  );
+
+  // ─── Área de mensagens — flex:1 + overflow-y:auto + min-height:0
+  // (min-height:0 é o segredo do flex pra deixar o filho rolar quando o
+  // conteúdo passa do tamanho do container).
   const messagesArea = (
     <div
       ref={scrollRef}
-      className="overflow-y-auto space-y-3 px-5"
       data-testid="ai-tutor-messages"
-      style={
-        isMobile
-          ? {
-              flex: 1,
-              minHeight: 0,
-              // Padding extra pra que o texto NUNCA fique escondido atrás do header
-              // fixo nem da caixa de digitação do Android (S24 Ultra).
-              paddingTop: '70px',
-              paddingBottom: '120px',
-              contain: 'layout paint',
-            }
-          : {
-              maxHeight: '55vh',
-              paddingTop: '16px',
-              // Desktop também recebe padding-bottom generoso para que a última
-              // mensagem sempre fique acima da barra de input.
-              paddingBottom: '120px',
-            }
-      }
+      className="space-y-3 px-5 py-4"
+      style={{
+        flex: '1 1 auto',
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        // Padding-bottom extra evita a última mensagem grudar na barra de input.
+        paddingBottom: '24px',
+      }}
     >
       {messages.length === 0 && (
-        <div className="text-foreground/50 text-sm font-sans italic text-center py-8">
+        <div className="text-foreground/55 text-sm font-sans italic text-center py-8 max-w-[85%] mx-auto">
           Faça uma pergunta sobre o conteúdo. O tutor responde com base nas Escrituras.
         </div>
       )}
@@ -124,7 +174,14 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
           <div className="text-[10px] uppercase tracking-[0.15em] mb-1 text-gold/70">
             {m.role === 'user' ? 'Você' : 'Tutor'}
           </div>
-          <div className="whitespace-pre-wrap font-sans">{m.text}</div>
+          {/* whitespace-pre-wrap + word-break:break-word permite que respostas
+              longas da IA quebrem corretamente sem travar a largura da bolha. */}
+          <div
+            className="font-sans"
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+          >
+            {m.text}
+          </div>
         </div>
       ))}
       {loading && (
@@ -135,8 +192,12 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
     </div>
   );
 
+  // ─── Barra de input (compartilhada) ───
   const inputBar = (
-    <div className="flex items-end gap-2 px-5 py-3 bg-[#001529] border-t border-gold/15">
+    <div
+      className="flex items-end gap-2 px-5 py-3 border-t border-gold/15"
+      style={{ background: '#001529', flexShrink: 0 }}
+    >
       <Textarea
         data-testid="ai-tutor-input"
         value={input}
@@ -156,17 +217,15 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
         onClick={send}
         disabled={loading || !input.trim()}
         className="bg-gold text-navy-dark hover:bg-gold-soft active:scale-95 h-12 w-12 p-0 shrink-0"
+        aria-label="Enviar"
       >
         {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
       </Button>
     </div>
   );
 
-  // ─── Mobile: Modal Fullscreen com header fixo ABSOLUTO + input fixo ABSOLUTO ───
-  // Header e input são overlays posicionados — o scroll da lista rola POR BAIXO deles.
-  // Padding no messagesArea (70 top / 120 bottom) garante que o conteúdo nunca
-  // fique escondido atrás das barras, mesmo com o teclado Android aberto.
-  // SEMPRE MONTADO (visibility toggle) — evita mount/unmount → previne insertBefore crash.
+  // ─── Mobile: Modal Fullscreen — flex column puro, sem position:absolute.
+  // SEMPRE MONTADO (visibility toggle) — anti-crash insertBefore.
   if (isMobile) {
     return (
       <div
@@ -181,77 +240,40 @@ export default function AITutorDrawer({ open, onOpenChange, contexto, titulo = '
           background: '#001529',
           display: 'flex',
           flexDirection: 'column',
+          // 100dvh = altura visível dinâmica → encolhe quando o teclado Android
+          // abre. Combinado com flex-column, o input "sobe junto" sem JS.
           height: '100dvh',
-          contain: 'layout paint',
+          maxHeight: '100dvh',
           visibility: open ? 'visible' : 'hidden',
           pointerEvents: open ? 'auto' : 'none',
         }}
       >
-        {/* Header — absoluto no topo */}
-        <div
-          className="flex items-center justify-between px-5 py-3 border-b border-gold/15"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 2,
-            background: '#001529',
-            minHeight: '62px',
-          }}
-        >
-          <div className="flex-1 min-w-0">
-            <p className="font-serif text-xl text-gold flex items-center gap-2 truncate">
-              <Sparkles size={18} strokeWidth={1.5} /> {titulo}
-            </p>
-            {descricao ? (
-              <p className="text-foreground/70 text-xs font-sans truncate">{descricao}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            data-testid="ai-tutor-mobile-close"
-            onClick={() => onOpenChange(false)}
-            aria-label="Fechar"
-            className="ml-3 w-10 h-10 rounded-full border border-gold/30 text-foreground hover:bg-gold/10 flex items-center justify-center shrink-0"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Mensagens — flex:1, scroll próprio, padding grande pra escapar dos overlays */}
+        {header}
         {messagesArea}
-
-        {/* Input — absoluto no rodapé */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 2,
-          }}
-        >
-          {inputBar}
-        </div>
+        {inputBar}
       </div>
     );
   }
 
-  // ─── Desktop: mantém Drawer Vaul tradicional ───
+  // ─── Desktop: Drawer Vaul, mas com altura controlada e flex column.
+  // DrawerContent ganha max-h-[85vh] e flex-column pra área de mensagens
+  // poder rolar ao invés de empurrar o input pra fora.
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="bg-navy-dark border-gold/20 max-w-md mx-auto">
-        <DrawerHeader className="border-b border-gold/10">
-          <DrawerTitle className="font-serif text-2xl text-gold flex items-center gap-2">
-            <Sparkles size={18} strokeWidth={1.5} /> {titulo}
-          </DrawerTitle>
-          {descricao && <DrawerDescription className="text-foreground/70 text-sm">{descricao}</DrawerDescription>}
-        </DrawerHeader>
+      <DrawerContent
+        className="bg-navy-dark border-gold/20 mx-auto p-0"
+        style={{
+          maxWidth: '480px',
+          width: '100%',
+          height: '85vh',
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {header}
         {messagesArea}
-        <DrawerFooter className="border-t border-gold/10 gap-2 p-0">
-          {inputBar}
-        </DrawerFooter>
+        {inputBar}
       </DrawerContent>
     </Drawer>
   );
