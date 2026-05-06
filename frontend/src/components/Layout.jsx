@@ -1,5 +1,6 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import Sidebar from './Sidebar';
 import { useAuth } from '../contexts/AuthContext';
 import { effectivePlan, trialDaysLeft } from '../lib/plan';
 import { User, Sparkles } from 'lucide-react';
@@ -12,10 +13,16 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen w-full bg-navy-dark flex justify-center">
-      <div className="relative w-full max-w-md lg:max-w-6xl min-h-screen bg-gradient-to-b from-navy-dark via-navy to-navy-dark flex flex-col pb-[80px] lg:pb-10">
-        <header className="sticky top-0 z-40 px-5 lg:px-8 pt-5 pb-3 flex items-center justify-between glass-bottom border-b border-gold/10">
+      {/* Sidebar lateral — fixa em telas lg+ (largura 64px / w-16) */}
+      <Sidebar />
+
+      {/* Container principal — desloca à direita em lg+ pra caber a sidebar */}
+      <div
+        className="relative w-full max-w-md lg:max-w-6xl min-h-screen bg-gradient-to-b from-navy-dark via-navy to-navy-dark flex flex-col pb-[80px] lg:pb-10 lg:ml-16"
+      >
+        <header className="sticky top-0 z-30 px-5 lg:px-8 pt-5 pb-3 flex items-center justify-between glass-bottom border-b border-gold/10">
           <div className="flex items-center gap-2">
-            <Sparkles size={18} strokeWidth={1.5} className="text-gold" />
+            <Sparkles size={18} strokeWidth={1.5} className="text-gold lg:hidden" />
             <h1 className="font-serif text-lg lg:text-xl tracking-wide text-foreground">Teologia <span className="italic text-gold">Viva</span></h1>
           </div>
           <div className="flex items-center gap-2">
@@ -49,6 +56,7 @@ export default function Layout() {
           <Outlet />
         </main>
 
+        {/* Bottom nav só em mobile (<lg). Desktop usa Sidebar. */}
         <BottomNav />
       </div>
     </div>
