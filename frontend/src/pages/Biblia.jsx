@@ -48,10 +48,13 @@ export default function Biblia() {
   const [bookId, setBookId] = useState(() => {
     try {
       const raw = localStorage.getItem(LS_BOOK);
-      // Migração: schema antigo usava ids tipo "joao", "genesis". Agora usamos abbrev "jo", "gn".
-      if (raw && raw.length > 4) return 'jo';
-      return raw || 'jo';
-    } catch { return 'jo'; }
+      // Migração: schema antigo usava ids tipo "joao", "genesis". Agora usamos
+      // abbrev curto "gn", "jo", etc. Se vier algo grande, força o default.
+      if (raw && raw.length > 4) return 'gn';
+      // Default: Gênesis (primeiro livro da Bíblia) — usuário pediu para não
+      // ficar vazio ao abrir pela primeira vez.
+      return raw || 'gn';
+    } catch { return 'gn'; }
   });
   const [chapter, setChapter] = useState(() => {
     try { return parseInt(localStorage.getItem(LS_CHAPTER) || '3', 10); } catch { return 3; }
@@ -200,9 +203,10 @@ export default function Biblia() {
         const list = await listBooks(translationId);
         if (!active) return;
         setBooks(list);
-        // Se o livro atual não existe nessa versão, vai para o primeiro
+        // Se o livro atual não existe nessa versão, vai para Gênesis (ou primeiro livro).
         if (!list.some((b) => b.id === bookId)) {
-          setBookId(list[0]?.id || 'jo');
+          const fallback = list.find((b) => b.id === 'gn') || list[0];
+          setBookId(fallback?.id || 'gn');
           setChapter(1);
         }
       } catch (e) {
@@ -748,10 +752,21 @@ export default function Biblia() {
             data-testid="biblia-book-picker"
             variant="outline"
             onClick={() => setPickerOpen(true)}
-            className="flex-1 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50 h-11"
+            className="flex-1 min-w-0 border-gold/30 bg-navy-light/30 text-foreground hover:bg-navy-light/50 h-11 justify-start px-3"
           >
-            <BookOpen size={16} className="mr-2 text-gold" />
-            {book?.nome || '—'} {chapter}
+            <BookOpen size={16} className="mr-2 text-gold shrink-0" />
+            <span
+              data-testid="biblia-book-name"
+              className="font-serif text-base truncate"
+            >
+              {/* Sempre mostra o nome do livro: prioriza `nome`, depois `name`,
+                  fallback para abbrev em caixa alta, e default "Gênesis" se
+                  os livros ainda não carregaram. */}
+              {book?.nome || book?.name || (book?.abbrev ? book.abbrev.toUpperCase() : 'Gênesis')}
+            </span>
+            <span className="ml-2 text-foreground/70 font-sans tabular-nums shrink-0">
+              {chapter}
+            </span>
           </Button>
           <Button onClick={goPrev} variant="outline" size="icon" className="border-gold/30 text-gold h-11 w-11 shrink-0" data-testid="biblia-prev"><ChevronLeft size={18} /></Button>
           <Button onClick={goNext} variant="outline" size="icon" className="border-gold/30 text-gold h-11 w-11 shrink-0" data-testid="biblia-next"><ChevronRight size={18} /></Button>
